@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vedic-astro-ai"
+version = "0.1.0"
+description = "Production-quality Vedic astrology AI system with deterministic computation engines"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pyswisseph>=2.10.3",
+    "redis>=5.0.0",
+    "motor>=3.3.0",               # async MongoDB driver
+    "pymongo>=4.6.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "faiss-cpu>=1.7.4",
+    "chromadb>=0.4.0",
+    "anthropic>=0.34.0",
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "gradio>=4.16.0",
+    "python-dotenv>=1.0.0",
+    "httpx>=0.26.0",              # async HTTP for geocoding
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.2.0",
+    "mypy>=1.8.0",
+    "ipykernel>=6.29.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vedic_astro"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-v --tb=short"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
