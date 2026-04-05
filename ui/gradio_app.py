@@ -310,14 +310,14 @@ def handle_query(
         logger.exception("Pipeline error")
         err = f"Something went wrong — {exc}"
         return (
-            chat_history + [[str(query), err]],
+            chat_history + [{"role": "user", "content": str(query)}, {"role": "assistant", "content": err}],
             session_state, "", "", "", "", "", _EMPTY_DF.copy(), "", {}, "", err,
         )
 
     _run_async(_save_session(session_state, birth, reading))
 
     response_md = reading.to_markdown() if hasattr(reading, "to_markdown") else str(reading.final_reading)
-    new_history = chat_history + [[str(query), response_md]]
+    new_history = chat_history + [{"role": "user", "content": str(query)}, {"role": "assistant", "content": response_md}]
 
     score_val = reading.score.final_score if reading.score else 0
     status = f"Domain · **{domain}** &nbsp;·&nbsp; Score · **{score_val:.2f}** &nbsp;·&nbsp; {reading.score.interpretation.replace('_',' ').title() if reading.score else ''}"
@@ -505,9 +505,9 @@ def build_demo() -> gr.Blocks:
                 chatbot = gr.Chatbot(
                     label="",
                     height=480,
-                    type="tuples",
                     show_copy_button=True,
                     show_label=False,
+                    type="messages",
                     elem_classes="chatbot-wrap",
                     placeholder=(
                         "**Ask anything about your chart**\n\n"
@@ -584,7 +584,6 @@ def build_demo() -> gr.Blocks:
                     query_input, domain_sel, query_date_str],
             label="Examples",
             examples_per_page=3,
-            elem_classes="examples-wrap",
         )
 
         # Wire
