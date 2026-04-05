@@ -19,23 +19,214 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────────────────────
 
 CITIES: list[str] = [
-    # India
+    # ── India — Mega cities ───────────────────────────────
     "Mumbai, India", "Delhi, India", "New Delhi, India", "Bengaluru, India",
     "Bangalore, India", "Chennai, India", "Kolkata, India", "Hyderabad, India",
-    "Pune, India", "Ahmedabad, India", "Jaipur, India", "Lucknow, India",
-    "Kanpur, India", "Nagpur, India", "Indore, India", "Thane, India",
-    "Bhopal, India", "Visakhapatnam, India", "Vadodara, India", "Surat, India",
-    "Patna, India", "Agra, India", "Varanasi, India", "Nashik, India",
-    "Meerut, India", "Faridabad, India", "Rajkot, India", "Kalyan, India",
-    "Amritsar, India", "Ludhiana, India", "Jabalpur, India", "Gwalior, India",
-    "Coimbatore, India", "Madurai, India", "Vijayawada, India", "Jodhpur, India",
-    "Ranchi, India", "Guwahati, India", "Chandigarh, India", "Kochi, India",
-    "Thiruvananthapuram, India", "Bhubaneswar, India", "Dehradun, India",
-    "Shimla, India", "Srinagar, India", "Jammu, India", "Mysore, India",
-    "Mangalore, India", "Hubli, India", "Belgaum, India", "Tiruchirappalli, India",
-    "Tirupati, India", "Raipur, India", "Udaipur, India", "Ajmer, India",
-    "Mathura, India", "Haridwar, India", "Rishikesh, India", "Allahabad, India",
-    "Prayagraj, India", "Aurangabad, India", "Solapur, India", "Kolhapur, India",
+    "Pune, India", "Ahmedabad, India",
+
+    # ── Maharashtra ───────────────────────────────────────
+    "Nagpur, India", "Thane, India", "Nashik, India", "Aurangabad, India",
+    "Solapur, India", "Kolhapur, India", "Amravati, India", "Nanded, India",
+    "Sangli, India", "Jalgaon, India", "Akola, India", "Latur, India",
+    "Dhule, India", "Ahmednagar, India", "Chandrapur, India", "Parbhani, India",
+    "Ichalkaranji, India", "Jalna, India", "Ambernath, India", "Bhiwandi, India",
+    "Panvel, India", "Kalyan, India", "Dombivli, India", "Vasai-Virar, India",
+    "Malegaon, India", "Navi Mumbai, India", "Ulhasnagar, India", "Satara, India",
+    "Ratnagiri, India", "Sindhudurg, India", "Osmanabad, India", "Beed, India",
+    "Hingoli, India", "Washim, India", "Buldhana, India", "Yavatmal, India",
+    "Wardha, India", "Gondia, India", "Gadchiroli, India", "Bhandara, India",
+    "Shirdi, India", "Pandharpur, India", "Alibag, India",
+
+    # ── Uttar Pradesh ─────────────────────────────────────
+    "Lucknow, India", "Kanpur, India", "Agra, India", "Varanasi, India",
+    "Prayagraj, India", "Allahabad, India", "Meerut, India", "Ghaziabad, India",
+    "Noida, India", "Greater Noida, India", "Bareilly, India", "Aligarh, India",
+    "Moradabad, India", "Saharanpur, India", "Gorakhpur, India", "Firozabad, India",
+    "Jhansi, India", "Muzaffarnagar, India", "Mathura, India", "Hapur, India",
+    "Rampur, India", "Shahjahanpur, India", "Farrukhabad, India", "Mau, India",
+    "Haridwar, India", "Etawah, India", "Mirzapur, India", "Bulandshahr, India",
+    "Sambhal, India", "Amroha, India", "Hardoi, India", "Fatehpur, India",
+    "Raebareli, India", "Orai, India", "Sitapur, India", "Bahraich, India",
+    "Modinagar, India", "Unnao, India", "Jaunpur, India", "Lakhimpur, India",
+    "Hathras, India", "Banda, India", "Pilibhit, India", "Barabanki, India",
+    "Khurja, India", "Gonda, India", "Mainpuri, India", "Lalitpur, India",
+    "Etah, India", "Deoria, India", "Basti, India", "Azamgarh, India",
+    "Sultanpur, India", "Faizabad, India", "Ayodhya, India", "Ballia, India",
+    "Rishikesh, India", "Vrindavan, India", "Nandgaon, India",
+
+    # ── Rajasthan ─────────────────────────────────────────
+    "Jaipur, India", "Jodhpur, India", "Kota, India", "Bikaner, India",
+    "Ajmer, India", "Udaipur, India", "Bhilwara, India", "Alwar, India",
+    "Bharatpur, India", "Sikar, India", "Pali, India", "Sri Ganganagar, India",
+    "Sriganganagar, India", "Hanumangarh, India", "Jhunjhunu, India",
+    "Tonk, India", "Dausa, India", "Chittorgarh, India", "Nagaur, India",
+    "Jhalawar, India", "Barmer, India", "Jaisalmer, India", "Dungarpur, India",
+    "Banswara, India", "Sawai Madhopur, India", "Churu, India", "Dholpur, India",
+    "Karauli, India", "Rajsamand, India", "Baran, India", "Bundi, India",
+    "Sirohi, India", "Pratapgarh, India", "Pushkar, India", "Nathdwara, India",
+
+    # ── Madhya Pradesh ────────────────────────────────────
+    "Indore, India", "Bhopal, India", "Jabalpur, India", "Gwalior, India",
+    "Ujjain, India", "Sagar, India", "Dewas, India", "Satna, India",
+    "Ratlam, India", "Rewa, India", "Murwara, India", "Singrauli, India",
+    "Burhanpur, India", "Khandwa, India", "Bhind, India", "Chhindwara, India",
+    "Guna, India", "Shivpuri, India", "Vidisha, India", "Chhatarpur, India",
+    "Damoh, India", "Mandsaur, India", "Khargone, India", "Neemuch, India",
+    "Pithampur, India", "Hoshangabad, India", "Itarsi, India", "Sehore, India",
+    "Betul, India", "Seoni, India", "Datia, India", "Nagda, India",
+    "Omkareshwar, India", "Pachmarhi, India", "Orchha, India",
+
+    # ── Gujarat ───────────────────────────────────────────
+    "Ahmedabad, India", "Surat, India", "Vadodara, India", "Rajkot, India",
+    "Bhavnagar, India", "Jamnagar, India", "Junagadh, India", "Gandhinagar, India",
+    "Anand, India", "Navsari, India", "Morbi, India", "Nadiad, India",
+    "Surendranagar, India", "Bharuch, India", "Mehsana, India", "Bhuj, India",
+    "Botad, India", "Amreli, India", "Valsad, India", "Patan, India",
+    "Dahod, India", "Porbandar, India", "Godhra, India", "Veraval, India",
+    "Palanpur, India", "Ankleshwar, India", "Dwarka, India", "Somnath, India",
+    "Vapi, India", "Silvassa, India", "Daman, India", "Diu, India",
+
+    # ── Tamil Nadu ────────────────────────────────────────
+    "Chennai, India", "Coimbatore, India", "Madurai, India", "Tiruchirappalli, India",
+    "Salem, India", "Tirunelveli, India", "Tiruppur, India", "Vellore, India",
+    "Erode, India", "Thoothukkudi, India", "Thoothukudi, India", "Dindigul, India",
+    "Thanjavur, India", "Ranipet, India", "Sivakasi, India", "Karur, India",
+    "Udhagamandalam, India", "Ooty, India", "Hosur, India", "Nagercoil, India",
+    "Kanchipuram, India", "Kumbakonam, India", "Tambaram, India", "Avadi, India",
+    "Tiruvannamalai, India", "Pollachi, India", "Rajapalayam, India",
+    "Gudiyatham, India", "Pudukkottai, India", "Nagapattinam, India",
+    "Villupuram, India", "Cuddalore, India", "Chidambaram, India",
+    "Mayiladuthurai, India", "Ariyalur, India", "Perambalur, India",
+    "Namakkal, India", "Dharmapuri, India", "Krishnagiri, India",
+    "Tiruvallur, India", "Kancheepuram, India", "Mahabalipuram, India",
+    "Rameswaram, India", "Madurai, India",
+
+    # ── Karnataka ─────────────────────────────────────────
+    "Bengaluru, India", "Mysore, India", "Mysuru, India", "Hubli, India",
+    "Mangalore, India", "Mangaluru, India", "Belgaum, India", "Belagavi, India",
+    "Gulbarga, India", "Kalaburagi, India", "Davangere, India", "Bellary, India",
+    "Ballari, India", "Bijapur, India", "Vijayapura, India", "Shivamogga, India",
+    "Tumkur, India", "Raichur, India", "Bidar, India", "Hospet, India",
+    "Hassan, India", "Gadag, India", "Udupi, India", "Dharwad, India",
+    "Chitradurga, India", "Bagalkot, India", "Mandya, India", "Kolar, India",
+    "Chikballapur, India", "Chikkamagaluru, India", "Koppal, India",
+    "Yadgir, India", "Haveri, India", "Karwar, India", "Sirsi, India",
+    "Hampi, India", "Badami, India", "Pattadakal, India",
+
+    # ── Andhra Pradesh ────────────────────────────────────
+    "Visakhapatnam, India", "Vijayawada, India", "Guntur, India", "Tirupati, India",
+    "Nellore, India", "Kurnool, India", "Rajahmundry, India", "Kakinada, India",
+    "Kadapa, India", "Anantapur, India", "Vizianagaram, India", "Eluru, India",
+    "Ongole, India", "Nandyal, India", "Machilipatnam, India", "Adoni, India",
+    "Tenali, India", "Proddatur, India", "Chittoor, India", "Hindupur, India",
+    "Bhimavaram, India", "Madanapalle, India", "Guntakal, India", "Dhone, India",
+    "Amaravati, India", "Srikakulam, India",
+
+    # ── Telangana ─────────────────────────────────────────
+    "Hyderabad, India", "Warangal, India", "Nizamabad, India", "Khammam, India",
+    "Karimnagar, India", "Ramagundam, India", "Mahabubnagar, India",
+    "Nalgonda, India", "Adilabad, India", "Suryapet, India", "Miryalaguda, India",
+    "Jagtial, India", "Mancherial, India", "Kothagudem, India", "Secunderabad, India",
+
+    # ── Kerala ────────────────────────────────────────────
+    "Thiruvananthapuram, India", "Kochi, India", "Kozhikode, India",
+    "Thrissur, India", "Kollam, India", "Palakkad, India", "Alappuzha, India",
+    "Malappuram, India", "Kannur, India", "Kasaragod, India", "Kottayam, India",
+    "Pathanamthitta, India", "Idukki, India", "Ernakulam, India",
+    "Vatakara, India", "Thalassery, India", "Ponnani, India", "Chalakudy, India",
+    "Changanassery, India", "Guruvayur, India", "Munnar, India",
+    "Thekkady, India", "Varkala, India", "Kovalam, India",
+
+    # ── Punjab ────────────────────────────────────────────
+    "Ludhiana, India", "Amritsar, India", "Jalandhar, India", "Patiala, India",
+    "Bathinda, India", "Mohali, India", "Hoshiarpur, India", "Gurdaspur, India",
+    "Pathankot, India", "Moga, India", "Abohar, India", "Malerkotla, India",
+    "Khanna, India", "Phagwara, India", "Muktsar, India", "Barnala, India",
+    "Rajpura, India", "Firozpur, India", "Kapurthala, India", "Sangrur, India",
+    "Fatehgarh Sahib, India", "Ropar, India", "Nawanshahr, India",
+    "Tarn Taran, India", "Anandpur Sahib, India", "Fatehgarh Sahib, India",
+
+    # ── Haryana ───────────────────────────────────────────
+    "Faridabad, India", "Gurgaon, India", "Gurugram, India", "Panipat, India",
+    "Ambala, India", "Yamunanagar, India", "Rohtak, India", "Hisar, India",
+    "Karnal, India", "Sonipat, India", "Panchkula, India", "Bhiwani, India",
+    "Sirsa, India", "Bahadurgarh, India", "Jind, India", "Thanesar, India",
+    "Kaithal, India", "Rewari, India", "Palwal, India", "Hansi, India",
+    "Narnaul, India", "Fatehabad, India", "Mewat, India", "Kurukshetra, India",
+
+    # ── West Bengal ───────────────────────────────────────
+    "Kolkata, India", "Howrah, India", "Asansol, India", "Siliguri, India",
+    "Durgapur, India", "Bardhaman, India", "Burdwan, India", "Malda, India",
+    "Baharampur, India", "Habra, India", "Kharagpur, India", "Shantipur, India",
+    "Dankuni, India", "Dhulian, India", "Ranaghat, India", "Haldia, India",
+    "Raiganj, India", "Krishnanagar, India", "Nabadwip, India", "Medinipur, India",
+    "Jalpaiguri, India", "Cooch Behar, India", "Darjeeling, India",
+    "Alipurduar, India", "Bankura, India", "Purulia, India", "Bishnupur, India",
+    "Murshidabad, India", "Balurghat, India", "Barasat, India",
+
+    # ── Bihar ─────────────────────────────────────────────
+    "Patna, India", "Gaya, India", "Bhagalpur, India", "Muzaffarpur, India",
+    "Purnia, India", "Darbhanga, India", "Bihar Sharif, India", "Arrah, India",
+    "Begusarai, India", "Katihar, India", "Munger, India", "Chhapra, India",
+    "Danapur, India", "Bettiah, India", "Saharsa, India", "Sasaram, India",
+    "Hajipur, India", "Dehri, India", "Siwan, India", "Motihari, India",
+    "Nawada, India", "Bagaha, India", "Buxar, India", "Kishanganj, India",
+    "Sitamarhi, India", "Supaul, India", "Madhubani, India", "Bodh Gaya, India",
+    "Nalanda, India", "Rajgir, India",
+
+    # ── Odisha ────────────────────────────────────────────
+    "Bhubaneswar, India", "Cuttack, India", "Rourkela, India", "Berhampur, India",
+    "Sambalpur, India", "Puri, India", "Balasore, India", "Bhadrak, India",
+    "Baripada, India", "Jharsuguda, India", "Bargarh, India", "Jeypore, India",
+    "Rayagada, India", "Koraput, India", "Kendujhar, India", "Angul, India",
+    "Dhenkanal, India", "Kendrapara, India", "Jagatsinghpur, India",
+    "Jajpur, India", "Konark, India", "Chilika, India",
+
+    # ── Assam & North East ────────────────────────────────
+    "Guwahati, India", "Dispur, India", "Silchar, India", "Dibrugarh, India",
+    "Jorhat, India", "Nagaon, India", "Tinsukia, India", "Tezpur, India",
+    "Goalpara, India", "Bongaigaon, India", "Dhubri, India", "Karimganj, India",
+    "Imphal, India", "Shillong, India", "Aizawl, India", "Kohima, India",
+    "Itanagar, India", "Agartala, India", "Gangtok, India",
+
+    # ── Jharkhand ─────────────────────────────────────────
+    "Ranchi, India", "Jamshedpur, India", "Dhanbad, India", "Bokaro, India",
+    "Deoghar, India", "Phusro, India", "Hazaribagh, India", "Giridih, India",
+    "Ramgarh, India", "Medininagar, India", "Chirkunda, India", "Dumka, India",
+    "Chaibasa, India", "Palamu, India",
+
+    # ── Chhattisgarh ──────────────────────────────────────
+    "Raipur, India", "Bhilai, India", "Korba, India", "Bilaspur, India",
+    "Durg, India", "Rajnandgaon, India", "Jagdalpur, India", "Ambikapur, India",
+    "Dhamtari, India", "Raigarh, India", "Mahasamund, India",
+
+    # ── Uttarakhand ───────────────────────────────────────
+    "Dehradun, India", "Haridwar, India", "Roorkee, India", "Haldwani, India",
+    "Rudrapur, India", "Kashipur, India", "Rishikesh, India", "Kotdwar, India",
+    "Ramnagar, India", "Mussoorie, India", "Nainital, India", "Almora, India",
+    "Pithoragarh, India", "Bageshwar, India", "Chamoli, India", "Kedarnath, India",
+    "Badrinath, India",
+
+    # ── Himachal Pradesh ──────────────────────────────────
+    "Shimla, India", "Dharamshala, India", "Solan, India", "Mandi, India",
+    "Palampur, India", "Baddi, India", "Nahan, India", "Kullu, India",
+    "Manali, India", "Chamba, India", "Una, India", "Bilaspur, India",
+    "Hamirpur, India", "Kangra, India", "Kasauli, India", "Dalhousie, India",
+
+    # ── J&K & Ladakh ──────────────────────────────────────
+    "Srinagar, India", "Jammu, India", "Anantnag, India", "Sopore, India",
+    "Baramulla, India", "Leh, India", "Kargil, India", "Kathua, India",
+    "Udhampur, India", "Rajouri, India", "Poonch, India", "Pahalgam, India",
+    "Gulmarg, India",
+
+    # ── Goa ───────────────────────────────────────────────
+    "Panaji, India", "Margao, India", "Vasco da Gama, India", "Mapusa, India",
+    "Ponda, India", "Bicholim, India", "Calangute, India", "Baga, India",
+
+    # ── Union Territories ─────────────────────────────────
+    "Chandigarh, India", "Puducherry, India", "Pondicherry, India",
+    "Port Blair, India", "Lakshadweep, India", "Kavaratti, India",
+    "Dadra, India",
     # UK
     "London, UK", "Manchester, UK", "Birmingham, UK", "Glasgow, UK",
     "Liverpool, UK", "Leeds, UK", "Sheffield, UK", "Bristol, UK",
