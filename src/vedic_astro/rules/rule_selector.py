@@ -12,6 +12,7 @@ from typing import Any
 
 from vedic_astro.rules.bphs_rules import (
     ASPECT_RULES,
+    ASHTAKAVARGA_RULES,
     DASHA_LORD_RULES,
     ANTARDASHA_RULES,
     DEBILITATION_SIGN,
@@ -20,11 +21,18 @@ from vedic_astro.rules.bphs_rules import (
     EXALTATION_SIGN,
     HOUSE_LORD_IN_HOUSE,
     HOUSE_SIGNIFICATIONS,
+    KARAKA_RULES,
+    LAGNA_RESULTS,
     MOOLATRIKONA,
+    MUHURTA_RULES,
+    NAVAMSHA_RULES,
     NEECHA_BHANGA_RULES,
     OWN_SIGNS,
     PLANET_IN_HOUSE,
+    PLANET_IN_SIGN,
+    SPECIAL_LAGNAS,
     TRANSIT_RULES,
+    VIMSHOPAKA_RULES,
     YOGA_RULES,
 )
 
@@ -60,7 +68,12 @@ def select_natal_rules(chart_data: dict[str, Any], domain: str, top_k: int = 8) 
     yogas     = chart_data.get("yogas", [])
     lagna     = chart_data.get("lagna", "")
 
-    # 1. Planet-in-house rules for each planet
+    # 1. Lagna result
+    lagna_sign = lagna.split("(")[0].strip() if "(" in lagna else lagna.strip()
+    if lagna_sign in LAGNA_RESULTS:
+        rules.append(f"Lagna ({lagna_sign}): {LAGNA_RESULTS[lagna_sign]}")
+
+    # 2. Planet-in-house AND planet-in-sign rules
     for planet, pdata in positions.items():
         if not isinstance(pdata, dict):
             continue
@@ -68,17 +81,23 @@ def select_natal_rules(chart_data: dict[str, Any], domain: str, top_k: int = 8) 
         sign  = pdata.get("sign", "")
         if not house:
             continue
-        planet_rules = PLANET_IN_HOUSE.get(planet, {})
-        rule = planet_rules.get(int(house))
+
+        # Planet-in-house
+        rule = PLANET_IN_HOUSE.get(planet, {}).get(int(house))
         if rule:
             rules.append(rule)
 
-        # 2. Dignity rule
+        # Planet-in-sign
+        sign_rule = PLANET_IN_SIGN.get(planet, {}).get(sign)
+        if sign_rule:
+            rules.append(sign_rule)
+
+        # Dignity rule
         dignity = _planet_dignity(planet, sign)
         if dignity in DIGNITY_RULES and dignity != "neutral":
             rules.append(f"{planet} ({sign}) — {DIGNITY_RULES[dignity]}")
 
-        # 3. Neecha Bhanga if debilitated
+        # Neecha Bhanga if debilitated
         if dignity == "debilitated":
             rules.extend(NEECHA_BHANGA_RULES)
 
@@ -93,7 +112,7 @@ def select_natal_rules(chart_data: dict[str, Any], domain: str, top_k: int = 8) 
     # 4. Domain rules
     rules.extend(DOMAIN_RULES.get(domain, DOMAIN_RULES["general"])[:4])
 
-    # 5. Foundation rule: always include house significations for key houses
+    # 5. House significations for key houses
     key_houses = {1, 7, 10, 5, 9}
     if domain == "marriage":
         key_houses = {1, 2, 7, 11}
@@ -109,6 +128,9 @@ def select_natal_rules(chart_data: dict[str, Any], domain: str, top_k: int = 8) 
         rules.append(
             f"House {h} ({info['name']}): governs {', '.join(info['governs'][:4])}. Karaka: {info['karaka']}."
         )
+
+    # 6. Ashtakavarga reminder
+    rules.append(ASHTAKAVARGA_RULES[0])
 
     return _deduplicate(rules)[:top_k]
 
@@ -128,7 +150,6 @@ def select_dasha_rules(dasha_data: dict[str, Any], domain: str, top_k: int = 6) 
         if sub:
             rules.append(f"{maha}-{antar} antardasha: {sub}")
 
-    # General dasha aphorism
     rules.append(
         "The Mahadasha lord's natal house, sign dignity, and house rulership determine the flavour of the dasha period. "
         "If the Mahadasha lord rules a kendra or trikona and is strong, the period is beneficial; if it rules a trik house (6,8,12) or is weak, challenges arise."
@@ -137,6 +158,8 @@ def select_dasha_rules(dasha_data: dict[str, Any], domain: str, top_k: int = 6) 
         "The Antardasha lord modifies the Mahadasha's theme — a benefic antardasha lord within a difficult mahadasha brings relief; "
         "a malefic antardasha within a beneficial mahadasha brings temporary obstacles."
     )
+    # Muhurta timing rules for event prediction
+    rules.extend(MUHURTA_RULES[:2])
 
     # Domain-specific dasha timing rules
     domain_timing = {
@@ -156,7 +179,7 @@ def select_dasha_rules(dasha_data: dict[str, Any], domain: str, top_k: int = 6) 
 
 def select_transit_rules(transit_data: dict[str, Any], domain: str, top_k: int = 5) -> list[str]:
     """Select BPHS gochara rules relevant to current transits."""
-    rules: list[str] = list(TRANSIT_RULES[:4])
+    rules: list[str] = list(TRANSIT_RULES[:4]) + ASHTAKAVARGA_RULES[:1]
 
     sade_sati = transit_data.get("sade_sati", False)
     if sade_sati:
@@ -231,17 +254,17 @@ def select_all_rules(
 
 
 def _divisional_rules(domain: str) -> list[str]:
-    base = [
-        "The Navamsha (D9) is the most important divisional chart — it reveals the soul's deeper nature and confirms Rashi chart results.",
-        "A planet that is weak in D1 but strong in D9 (Vargottama or exalted in D9) will give better results than its D1 position suggests.",
-        "Vargottama planets (same sign in D1 and D9) are extremely powerful and give consistent, reliable results.",
-        "The D9 7th house and its lord confirm marriage quality — a strong D9 7th overrides a weak D1 7th.",
-    ]
+    base = list(NAVAMSHA_RULES[:4]) + [
+        f"Special Lagnas — {k}: {v[:120]}…" for k, v in list(SPECIAL_LAGNAS.items())[:2]
+    ] + VIMSHOPAKA_RULES[:1]
     if domain in ("career", "social_standing"):
         base.append("The Dashamsha (D10) chart governs career specifics — the D10 lagna lord and 10th lord reveal professional strength.")
-    if domain in ("wealth",):
+    if domain == "wealth":
         base.append("The Hora chart (D2) determines wealth — Sun's Hora gives political/father wealth; Moon's Hora gives maternal/business wealth.")
-    return base[:5]
+    if domain == "marriage":
+        base.append(SPECIAL_LAGNAS.get("Upapada Lagna (UL)", "")[:200])
+    base += [f"Karaka: {k} — {v[:100]}…" for k, v in list(KARAKA_RULES.items())[:2]]
+    return _deduplicate(base)[:6]
 
 
 def _deduplicate(rules: list[str]) -> list[str]:

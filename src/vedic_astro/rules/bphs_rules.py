@@ -500,3 +500,398 @@ TRANSIT_RULES: list[str] = [
     "Rahu transiting the 1st, 5th, or 9th from Moon is challenging for health, children, and fortune.",
     "All transit results must be confirmed against the running Vimshottari Dasha — dasha is more important than transit alone.",
 ]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Planet in Sign results — BPHS Graha-Rashi Phala (all 9 planets × 12 signs)
+# ─────────────────────────────────────────────────────────────────────────────
+
+PLANET_IN_SIGN: dict[str, dict[str, str]] = {
+    "Sun": {
+        "Aries":       "Sun in Aries (exaltation, 10° highest): supreme vitality, pioneering spirit, natural leadership, bold and self-reliant; father figure is strong and authoritative.",
+        "Taurus":      "Sun in Taurus: steady but stubborn; wealth focus; artistic side emerges; values security; father may be wealthy, landed, or connected to agriculture.",
+        "Gemini":      "Sun in Gemini: intellectual, communicative, versatile; career in administration, writing, or government; split identity possible; clever father.",
+        "Cancer":      "Sun in Cancer: sensitive ego, domestic focus; fluctuating vitality depending on Moon's strength; relationship with father may be emotional or complicated.",
+        "Leo":         "Sun in Leo (own sign): powerful, regal, confident, generous; leadership and authority come naturally; father is prominent or noble.",
+        "Virgo":       "Sun in Virgo: analytical, service-oriented, detail-focused; career in medicine, accounting, or analysis; father is methodical and critical.",
+        "Libra":       "Sun in Libra (debilitation): weakened ego, indecisive, dependent on others for validation; partnership-oriented; father may be weak or absent; requires balancing.",
+        "Scorpio":     "Sun in Scorpio: intense, secretive, transformative; powerful will beneath reserved exterior; research, occult, or investigative work; father is intense.",
+        "Sagittarius": "Sun in Sagittarius: philosophical, dharmic, broad-minded; career in law, religion, or higher education; generous father figure; love of truth.",
+        "Capricorn":   "Sun in Capricorn: ambitious, disciplined, career-driven; slow rise to power; father is hardworking and authoritative; achievements come through sustained effort.",
+        "Aquarius":    "Sun in Aquarius: humanitarian, unconventional, community-oriented; career in social reform, technology, or large organisations; detached ego.",
+        "Pisces":      "Sun in Pisces: spiritual, imaginative, compassionate; career in healing, spirituality, or arts; father may be spiritual or absent; identity dissolves into service.",
+    },
+    "Moon": {
+        "Aries":       "Moon in Aries: impulsive emotions, quick reactions, pioneering instincts; restless mind; mother is courageous and independent; fond of action.",
+        "Taurus":      "Moon in Taurus (exaltation, 3° highest): emotionally stable, sensual, comfort-loving; strong memory; devoted mother; wealth and beauty are central.",
+        "Gemini":      "Moon in Gemini: intellectually restless, communicative emotions; dual feelings; witty and adaptable; mother is educated and communicative.",
+        "Cancer":      "Moon in Cancer (own sign): deeply emotional, intuitive, nurturing; strong bond with mother; comfort in home and family; fluctuating but sensitive mind.",
+        "Leo":         "Moon in Leo: proud, dramatic, warm-hearted; emotional need for recognition; mother is regal or influential; generous and creative mind.",
+        "Virgo":       "Moon in Virgo: analytical emotions, critical mind; health-conscious; mother is practical and service-oriented; worried or overthinking tendencies.",
+        "Libra":       "Moon in Libra: emotionally diplomatic, relationship-focused; need for harmony; mother is beautiful or artistic; balanced and fair-minded.",
+        "Scorpio":     "Moon in Scorpio (debilitation): intense, secretive emotions; jealousy or obsession possible; mother relationship is complex; deep psychological insight.",
+        "Sagittarius": "Moon in Sagittarius: optimistic, philosophical emotions; love of travel and freedom; mother is spiritual or broad-minded; generous instincts.",
+        "Capricorn":   "Moon in Capricorn: emotionally reserved, disciplined; slow to trust; mother may be strict or absent emotionally; ambition drives the mind.",
+        "Aquarius":    "Moon in Aquarius: detached, humanitarian emotions; unconventional feelings; mother is independent or unusual; community-minded instincts.",
+        "Pisces":      "Moon in Pisces: deeply empathetic, imaginative, spiritual; prone to emotional confusion; mother is compassionate; psychic or artistic sensitivities.",
+    },
+    "Mars": {
+        "Aries":       "Mars in Aries (own sign, Moolatrikona 0–12°): courageous, pioneering, energetic; excellent for leadership, sports, and independent ventures; Manglik active.",
+        "Taurus":      "Mars in Taurus: stubborn energy directed toward wealth and possessions; persistence in financial matters; Manglik in 2nd house effects apply.",
+        "Gemini":      "Mars in Gemini: energetic communication and writing; debates and arguments; sharp intellect applied to competition; scattered energy.",
+        "Cancer":      "Mars in Cancer (debilitation): energy frustrated; emotional aggression; conflict in home life; Manglik in 4th; mother relationship tense.",
+        "Leo":         "Mars in Leo: bold, dramatic, authoritative action; leadership and competition; sports, politics, or performance; courageous heart.",
+        "Virgo":       "Mars in Virgo: precise, analytical action; excellence in surgery, engineering detail, or technical work; critical and exacting approach.",
+        "Scorpio":     "Mars in Scorpio (own sign): intense, investigative, secretive drive; research, occult, military, or surgery; deep reserves of stamina.",
+        "Sagittarius": "Mars in Sagittarius: energetic pursuit of dharma; sports, philosophy, or law combined with courage; opinionated and direct.",
+        "Capricorn":   "Mars in Capricorn (exaltation, 28° highest): disciplined, organised, relentless; outstanding for career, military, and engineering; sustained achievement.",
+        "Aquarius":    "Mars in Aquarius: energy directed toward social causes or technology; combative in group settings; unconventional warrior.",
+        "Libra":       "Mars in Libra: energy in partnerships and negotiations; conflict in relationships; legal battles; Manglik in 7th house strongly active.",
+        "Pisces":      "Mars in Pisces: spiritual warrior; energy dissipates in compassion or confusion; hidden strength; work in hospitals, missions, or retreats.",
+    },
+    "Mercury": {
+        "Aries":       "Mercury in Aries: quick, assertive thinking; impulsive decisions; good for debate and rapid communication; starts many intellectual projects.",
+        "Taurus":      "Mercury in Taurus: practical, methodical intellect; excellent for finance, agriculture, or design; slow but thorough thought process.",
+        "Gemini":      "Mercury in Gemini (own sign, Moolatrikona): exceptionally quick intellect, eloquent, versatile; writing, teaching, and business flourish.",
+        "Cancer":      "Mercury in Cancer: intuitive, emotionally-coloured intellect; good memory; writing on domestic or emotional topics; influenced by mood.",
+        "Leo":         "Mercury in Leo: creative, dramatic intellect; authoritative speaker; good for performing arts administration, politics, or creative writing.",
+        "Virgo":       "Mercury in Virgo (own sign and exaltation, 15° highest): most powerful placement — supreme analytical ability, precision, healing arts, accounting.",
+        "Libra":       "Mercury in Libra: diplomatic, balanced intellect; legal reasoning; good for negotiation, arbitration, and partnership communication.",
+        "Scorpio":     "Mercury in Scorpio: penetrating, investigative mind; research, psychology, occult writing; secretive communicator.",
+        "Sagittarius": "Mercury in Sagittarius: philosophical intellect, broad-minded; good for religious writing, law, or teaching; can be dogmatic.",
+        "Capricorn":   "Mercury in Capricorn: structured, disciplined intellect; organisational and administrative skills; methodical writer and planner.",
+        "Aquarius":    "Mercury in Aquarius: innovative, scientific intellect; technology, astrology, or humanitarian causes; unconventional thinking.",
+        "Pisces":      "Mercury in Pisces (debilitation): imagination over logic; poetic or spiritual mind; poor in analytical tasks; good for mystical or artistic writing.",
+    },
+    "Jupiter": {
+        "Aries":       "Jupiter in Aries: enthusiastic, pioneering wisdom; teaching with energy; leadership in religion or law; wisdom through direct experience.",
+        "Taurus":      "Jupiter in Taurus: wealth, comfort, and dharma align; generous and pleasure-loving; teaching on material and spiritual abundance.",
+        "Gemini":      "Jupiter in Gemini: intellectual expansion; excellent teacher and writer; multiple philosophies; wisdom spread through communication.",
+        "Cancer":      "Jupiter in Cancer (exaltation, 5° highest): supreme benevolence, emotional wisdom, abundant wealth, devotion; blessed mother relationship.",
+        "Leo":         "Jupiter in Leo: noble, generous, regal wisdom; excellent for leadership in education, law, or religion; proud but just.",
+        "Virgo":       "Jupiter in Virgo: wisdom in service; teaching through healing, medicine, or analysis; can be overly critical in philosophy.",
+        "Libra":       "Jupiter in Libra: wisdom in relationships and justice; excellent for law, diplomacy, or counselling; generous in partnerships.",
+        "Scorpio":     "Jupiter in Scorpio: depth wisdom, occult knowledge; teaching on transformation and hidden matters; expansion through crisis.",
+        "Sagittarius": "Jupiter in Sagittarius (own sign, Moolatrikona): extremely fortunate, philosophical, generous; natural guru, teacher, or judge; dharma flows.",
+        "Capricorn":   "Jupiter in Capricorn (debilitation): wisdom is restricted or materialised; charitable impulse blocked; spiritual knowledge delayed; practical teacher.",
+        "Aquarius":    "Jupiter in Aquarius: humanitarian wisdom; teaching in social reform, technology, or community development; expansive in groups.",
+        "Pisces":      "Jupiter in Pisces (own sign): deep spiritual wisdom; moksha-oriented; compassionate; excellent for spiritual teaching and healing arts.",
+    },
+    "Venus": {
+        "Aries":       "Venus in Aries: passionate, impulsive love; quick attractions; artistic energy in action; competitive in relationships.",
+        "Taurus":      "Venus in Taurus (own sign): luxurious, sensual, stable love; artistic talent, wealth, and beauty; devoted and comfort-seeking.",
+        "Gemini":      "Venus in Gemini: charming, intellectual love; multiple relationships possible; arts through communication; beautiful voice.",
+        "Cancer":      "Venus in Cancer: nurturing, emotional love; devotion to home; artistic sensitivity; beauty through compassion.",
+        "Leo":         "Venus in Leo: dramatic, generous love; grand romantic gestures; artistic performance; pride in relationships.",
+        "Virgo":       "Venus in Virgo (debilitation): love is critical or conditional; service-oriented relationships; artistic precision; difficulties with pleasure.",
+        "Libra":       "Venus in Libra (own sign, Moolatrikona): harmonious, beautiful, diplomatic love; natural charm; wealth through partnership; artistic excellence.",
+        "Scorpio":     "Venus in Scorpio: intense, transformative love; passionate and jealous; wealth through inheritance; hidden beauty.",
+        "Sagittarius": "Venus in Sagittarius: philosophical love; attraction to foreign or spiritual partners; arts with dharmic themes.",
+        "Capricorn":   "Venus in Capricorn: disciplined, dutiful love; mature relationships; wealth through sustained effort; classical arts.",
+        "Aquarius":    "Venus in Aquarius: unconventional love; humanitarian relationships; beauty in community; arts for social causes.",
+        "Pisces":      "Venus in Pisces (exaltation, 27° highest): the most beautiful, spiritual, and compassionate love; artistic genius; wealth and harmony flow naturally.",
+    },
+    "Saturn": {
+        "Aries":       "Saturn in Aries (debilitation): energy is frustrated by restriction; impulsive action meets delay; challenges to authority and independence; lessons in patience.",
+        "Taurus":      "Saturn in Taurus: slow but steady wealth accumulation; material discipline; persistent effort in finance; property gains after delays.",
+        "Gemini":      "Saturn in Gemini: structured communication; serious writer or teacher; disciplined intellect; sibling relationships may be strained.",
+        "Cancer":      "Saturn in Cancer: emotional restriction; difficult relationship with mother; property delays; domestic responsibilities are heavy.",
+        "Leo":         "Saturn in Leo: ego is disciplined; authority earned through hard work; father-figure challenges; leadership through perseverance.",
+        "Virgo":       "Saturn in Virgo: excellent for service, medicine, or analysis; disciplined health practices; methodical and detail-oriented.",
+        "Libra":       "Saturn in Libra (exaltation, 20° highest): justice, discipline, and fairness combine; excellent for law, diplomacy, and sustained career success.",
+        "Scorpio":     "Saturn in Scorpio: deep karmic transformation; discipline in occult or research; chronic health issues possible; endurance in crisis.",
+        "Sagittarius": "Saturn in Sagittarius: disciplined dharma; serious philosophical study; slow fortune; father is strict or distant; long journeys for work.",
+        "Capricorn":   "Saturn in Capricorn (own sign): structured ambition, authority through discipline; excellent career in management, government, or engineering.",
+        "Aquarius":    "Saturn in Aquarius (own sign, Moolatrikona): humanitarian discipline; community service; technology-oriented; wisdom through detachment.",
+        "Pisces":      "Saturn in Pisces: spiritual discipline; service in isolation; withdrawal from the world; work in hospitals, ashrams, or foreign lands.",
+    },
+    "Rahu": {
+        "Aries":       "Rahu in Aries: intense ambition for self-assertion; obsession with identity and courage; pioneering but reckless; foreign ventures.",
+        "Taurus":      "Rahu in Taurus (exaltation per some texts): powerful material desires; obsession with wealth, beauty, and comfort; gains through unconventional means.",
+        "Gemini":      "Rahu in Gemini (exaltation per BPHS): excellent for communication, technology, and media; foreign languages; gains through information.",
+        "Cancer":      "Rahu in Cancer: obsession with home, mother, or emotional security; foreigners in family; unusual domestic life.",
+        "Leo":         "Rahu in Leo: craving recognition and authority; rise through unconventional means; fame or notoriety; political ambition.",
+        "Virgo":       "Rahu in Virgo: obsession with health, analysis, or service; foreign medical or technical work; gains through details and systems.",
+        "Libra":       "Rahu in Libra: obsessive partnerships; foreign or unconventional spouse; gains through negotiations and alliances.",
+        "Scorpio":     "Rahu in Scorpio: intense occult desires; obsession with transformation; sudden gains and losses; interest in foreign mysteries.",
+        "Sagittarius": "Rahu in Sagittarius (debilitation per some texts): challenges to dharma; unconventional religion; foreign guru; confused philosophy.",
+        "Capricorn":   "Rahu in Capricorn: relentless career ambition through unusual means; rise through foreign connections; disciplined but manipulative.",
+        "Aquarius":    "Rahu in Aquarius: obsession with social causes or technology; gains through groups and networks; unconventional humanitarianism.",
+        "Pisces":      "Rahu in Pisces: spiritual confusion; obsession with liberation or foreign spiritual practices; gains through imagination or deception.",
+    },
+    "Ketu": {
+        "Aries":       "Ketu in Aries: past-life warrior; detachment from self-assertion; sudden impulsive events; spiritual courage from previous lives.",
+        "Taurus":      "Ketu in Taurus: past-life wealth karma; detachment from material possessions; spiritual values over comfort; unusual relationship with money.",
+        "Gemini":      "Ketu in Gemini (debilitation per some texts): past-life communication skills; detachment from siblings; spiritual or cryptic speech.",
+        "Cancer":      "Ketu in Cancer: past-life home and mother karma; detachment from emotional security; spiritual connection to ancestral roots.",
+        "Leo":         "Ketu in Leo: past-life leadership karma; detachment from recognition; spiritual authority; hidden power behind the scenes.",
+        "Virgo":       "Ketu in Virgo: past-life service or healing karma; detachment from health analysis; spiritual healing abilities.",
+        "Libra":       "Ketu in Libra: past-life relationship karma; detachment from partnerships; spiritual seeking in relationships.",
+        "Scorpio":     "Ketu in Scorpio: past-life occult mastery (own house for Ketu in some systems); deep spiritual transformation; moksha-oriented.",
+        "Sagittarius": "Ketu in Sagittarius (exaltation per BPHS): highest spiritual wisdom from past lives; detachment from formal religion; true inner guru.",
+        "Capricorn":   "Ketu in Capricorn: past-life career mastery; detachment from ambition; spiritual service in structured environments.",
+        "Aquarius":    "Ketu in Aquarius: past-life humanitarian karma; detachment from groups and social causes; inner freedom from collective identity.",
+        "Pisces":      "Ketu in Pisces: past-life spiritual liberation; deep moksha indicators; detachment from imagination; transcendence of illusion.",
+    },
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Lagna (Ascendant) results — BPHS Lagna Adhyaya
+# ─────────────────────────────────────────────────────────────────────────────
+
+LAGNA_RESULTS: dict[str, str] = {
+    "Aries": (
+        "Aries Lagna (Mesha): ruled by Mars. The native has a muscular, medium-to-tall build with a reddish or ruddy complexion and a prominent forehead. "
+        "Personality is bold, independent, pioneering, and self-reliant — natural leader with a competitive spirit. Prone to anger and impatience. "
+        "Health is generally robust but prone to head injuries, fevers, and inflammatory conditions. Yogas: Mars strong in own sign or exaltation creates Ruchaka Mahapurusha Yoga; "
+        "Sun as 5th lord in kendra with Mars creates powerful Raj Yoga. Benefics in kendras protect the native's direct and courageous nature."
+    ),
+    "Taurus": (
+        "Taurus Lagna (Vrishabha): ruled by Venus. The native has a stocky, well-built body with a pleasant face and large eyes. "
+        "Personality is patient, sensual, artistic, and comfort-loving; extremely loyal but stubborn. "
+        "Health is stable but susceptible to throat, neck, and thyroid issues. Venus governs both the Lagna and 6th lord (as lord of Libra), creating a complex relationship with enemies and service. "
+        "Yogas: Venus in own sign in kendra creates Malavya Yoga; Saturn as 9th and 10th lord creates a powerful Dharma-Karma Adhipati Yoga when strong."
+    ),
+    "Gemini": (
+        "Gemini Lagna (Mithuna): ruled by Mercury. The native is tall, slim, with quick eyes and an expressive face. "
+        "Personality is intellectual, curious, communicative, versatile, and often scattered. Wit and adaptability are the defining traits. "
+        "Health: prone to nervous system issues, respiratory problems, and anxiety. "
+        "Yogas: Mercury strong in Gemini or Virgo creates Bhadra Yoga; Venus as 5th and 12th lord in kendra creates a Raj Yoga with spiritual undertones; "
+        "Saturn as 8th and 9th lord is a Yogakaraka when strong."
+    ),
+    "Cancer": (
+        "Cancer Lagna (Karka): ruled by Moon. The native has a round face, pale or fair complexion, and a medium build that tends toward weight gain. "
+        "Personality is deeply empathetic, intuitive, protective, and home-oriented; moods fluctuate with circumstances. "
+        "Health: chest, digestion, and mental health are sensitive. "
+        "Yogas: Mars as 5th and 10th lord is a supreme Yogakaraka — Mars in a kendra or trikona creates powerful Raj Yoga; Jupiter as 9th lord blesses with fortune. "
+        "The strongest chart comes when Moon (Lagna lord) is waxing, in a kendra, and aspected by Jupiter."
+    ),
+    "Leo": (
+        "Leo Lagna (Simha): ruled by Sun. The native has a broad, commanding presence with a large head, wide shoulders, and a regal bearing. "
+        "Personality is proud, generous, ambitious, and naturally authoritative; the center of attention wherever they go. "
+        "Health: heart and spine are sensitive; vitality is generally strong. "
+        "Yogas: Mars as 4th and 9th lord is a Yogakaraka; Jupiter as 5th lord blesses intellect and children. "
+        "Sun strong in Leo creates natural authority; Budha-Aditya Yoga (Sun-Mercury) is effective when Mercury is in Leo or nearby."
+    ),
+    "Virgo": (
+        "Virgo Lagna (Kanya): ruled by Mercury. The native is typically slim, tall, and health-conscious with sharp, observant eyes. "
+        "Personality is analytical, precise, service-oriented, and discriminating; an excellent planner and technician. "
+        "Health: digestive system and intestines are sensitive; prone to anxiety and overthinking. "
+        "Yogas: Venus as 2nd and 9th lord is a Yogakaraka — Venus strong creates wealth and fortune; Mercury's strength supports Bhadra Yoga. "
+        "Saturn as 5th and 6th lord gives discipline; benefics in trikona support a giving, dharmic life."
+    ),
+    "Libra": (
+        "Libra Lagna (Tula): ruled by Venus. The native has a symmetrical, attractive appearance with a refined demeanor and natural charm. "
+        "Personality is diplomatic, relationship-focused, fair-minded, and artistic; may struggle with decision-making. "
+        "Health: kidneys and lower back are sensitive; generally good health when balanced. "
+        "Yogas: Saturn as 4th and 5th lord is a supreme Yogakaraka — Saturn exalted in Libra itself is exceptional; Venus in own sign creates Malavya Yoga. "
+        "Mercury as 9th lord with Venus creates excellent Raj Yoga for career in law, arts, or diplomacy."
+    ),
+    "Scorpio": (
+        "Scorpio Lagna (Vrishchika): ruled by Mars (and Ketu as co-ruler). The native has a penetrating gaze, medium build, and intense energy. "
+        "Personality is secretive, transformative, research-oriented, and emotionally intense; resilient through crises. "
+        "Health: reproductive system, elimination organs, and chronic hidden conditions are sensitive. "
+        "Yogas: Moon as 9th lord in a kendra creates Raj Yoga; Jupiter as 2nd and 5th lord blesses wealth and children. "
+        "Mars strong as Lagna lord gives protective energy; Ketu in Lagna bestows deep spiritual insight from past lives."
+    ),
+    "Sagittarius": (
+        "Sagittarius Lagna (Dhanu): ruled by Jupiter. The native is tall, athletic, with an open, cheerful face and an optimistic bearing. "
+        "Personality is philosophical, freedom-loving, dharmic, and generous; a natural teacher, guide, or traveler. "
+        "Health: hips, thighs, and liver are sensitive; generally robust. "
+        "Yogas: Mars as 5th and 12th lord creates a spiritual Raj Yoga; Sun as 9th lord in a trikona or kendra creates exceptional fortune. "
+        "Jupiter's strength as Lagna lord is paramount — Jupiter exalted or in own sign confers Hamsa Yoga."
+    ),
+    "Capricorn": (
+        "Capricorn Lagna (Makara): ruled by Saturn. The native has a lean, angular build with a serious, disciplined bearing; ages well. "
+        "Personality is ambitious, practical, responsible, and methodical; success comes through sustained effort and patience. "
+        "Health: knees, joints, skin, and teeth are sensitive. "
+        "Yogas: Venus as 5th and 10th lord is a supreme Yogakaraka — Venus in kendra or trikona gives excellent career and children; "
+        "Mercury as 6th and 9th lord is mixed. Saturn's exaltation in Libra 10th from own Lagna completes a powerful career combination."
+    ),
+    "Aquarius": (
+        "Aquarius Lagna (Kumbha): ruled by Saturn (and Rahu as co-ruler). The native has a tall, lean, intellectual appearance with a detached, humanitarian manner. "
+        "Personality is innovative, socially conscious, independent, and reform-minded; can be eccentric or aloof. "
+        "Health: ankles, circulation, and nervous system are sensitive. "
+        "Yogas: Venus as 4th and 9th lord is a Yogakaraka — Venus strong gives property and fortune; "
+        "Mars as 3rd and 10th lord can give a powerful career through effort. "
+        "Saturn as Lagna lord must be strong; Rahu's strength amplifies the native's unconventional path."
+    ),
+    "Pisces": (
+        "Pisces Lagna (Meena): ruled by Jupiter. The native has a soft, compassionate appearance with large, dreamy eyes and a gentle bearing. "
+        "Personality is empathetic, spiritual, imaginative, and selfless; deeply intuitive but can lack boundaries. "
+        "Health: lymphatic system, feet, and immune system are sensitive; prone to addictions or escapism. "
+        "Yogas: Mars as 2nd and 9th lord is a Yogakaraka — Mars strong gives wealth and fortune; "
+        "Moon as 5th lord in a kendra creates Raj Yoga. Jupiter as Lagna lord must be strong for best results; "
+        "exalted Venus in Pisces creates Malavya Yoga with spiritual dimensions."
+    ),
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ashtakavarga rules — BPHS Ashtakavarga Adhyaya
+# ─────────────────────────────────────────────────────────────────────────────
+
+ASHTAKAVARGA_RULES: list[str] = [
+    "Ashtakavarga (SAV) measures the aggregate strength of all seven planets (Sun through Saturn) plus Lagna in each of the 12 signs; each sign receives bindus (benefic dots) from 0–8 contributors, giving a total of 0–56 bindus per sign.",
+    "In any sign, 4 or more bindus is considered average or above-average strength; signs with 5+ bindus give good results during transits through that sign, while signs with 3 or fewer bindus indicate weak periods.",
+    "When a sign in the SAV has 28 or more bindus, that sign is exceptionally strong — transits through it or events governed by that house yield very favorable results.",
+    "When a sign has fewer than 28 bindus in the SAV, the transit of a planet through it tends to be unfavorable or weak — natives experience obstacles related to that house's significations.",
+    "A Bhinna Ashtakavarga (BAV) score of 4 or more bindus for an individual planet in a sign indicates that planet transiting that sign gives good results; 3 or fewer is unfavorable.",
+    "The BAV of Saturn in its own Ashtakavarga is especially important for timing challenges: Saturn in a sign with fewer than 3 of its own bindus causes maximum difficulty during that transit.",
+    "Jupiter's BAV is critical for timing auspicious events — Jupiter transiting signs where it has 5+ of its own bindus in its Ashtakavarga brings the most benefit.",
+    "The total SAV score for all 12 signs should ideally sum to 337 bindus; a total above 337 indicates a generally fortunate and active life; below 337 suggests a quieter, more restricted life overall.",
+    "The house with the highest SAV score is the strongest area of life — the native thrives most in that house's domain throughout life.",
+    "The house with the lowest SAV score is the weakest domain — persistent challenges arise in that house's significations regardless of transits.",
+    "When both the Dasha lord and transiting planet are in signs with high BAV bindus, the period is doubly auspicious — Dasha, transit, and Ashtakavarga strength must all align for major events.",
+    "Sodhya Pinda (reduction of bindus) is applied to refine Ashtakavarga for timing of events: the Trikona Shodhana removes bindus from signs in trine, and the Ekadhipatya Shodhana adjusts for shared rulership.",
+    "The Prastara Ashtakavarga shows each planet's individual bindu contribution to every sign — studying this reveals which planets are contributing positively or negatively in each chart area.",
+    "Transits of slow planets (Saturn, Jupiter, Rahu/Ketu) through signs with high SAV are the most significant timing indicators — combine with Dasha for precise event prediction.",
+    "In timing longevity and difficult periods, count the bindus in the 8th house SAV: fewer than 25 bindus in the 8th can indicate vulnerability; more than 30 gives resilience.",
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Navamsha (D9) rules — BPHS Navamsha Phala Adhyaya
+# ─────────────────────────────────────────────────────────────────────────────
+
+NAVAMSHA_RULES: list[str] = [
+    "The Navamsha (D9) chart is the most important divisional chart in BPHS; it shows the soul's inner nature, the quality of marriage, and the deeper fruition of the Rashi (D1) promises.",
+    "A planet in the same sign in both the D1 Rashi chart and the D9 Navamsha chart is called Vargottama — this greatly amplifies the planet's strength and reliability of its results.",
+    "The D9 Lagna and its lord reveal the native's soul-level purpose and inner character; a strong D9 Lagna lord confers spiritual resilience even when the D1 Lagna is afflicted.",
+    "Planets that are weak in D1 (debilitated, combust, or in enemy signs) but strong in D9 (exalted or in own sign) give results better than their D1 placement suggests — the promise is fulfilled at the soul level.",
+    "Planets strong in D1 but weak in D9 give good appearances of results without full fruition — the external opportunity may arise but the inner experience or lasting benefit is diminished.",
+    "Pushkara Navamsha: the Navamsha portions of specific degrees (such as Taurus 23–26°40', Cancer 10–13°20', and others) are called Pushkara Navamsha and are especially auspicious — a planet placed in its Pushkara Navamsha gives highly beneficial results.",
+    "The 7th house and its lord in D9 determine the deeper nature of marriage and the spouse's inner character — even if D1 7th house is afflicted, a strong D9 7th can salvage marriage happiness.",
+    "The D9 chart should confirm D1 indications for any prediction to be reliable — if D1 shows a Raja Yoga but D9 does not support it, the yoga gives only partial results.",
+    "Atmakaraka (the planet with the highest degree in any sign) placed in the D9 Navamsha Lagna (Karakamsha) reveals the soul's core desire and dharmic focus for this lifetime.",
+    "Malefic planets in the D9 Lagna or aspecting the D9 Lagna lord can indicate spiritual challenges or karmic burdens that the native must consciously address.",
+    "Benefic planets in the D9 5th or 9th from the D9 Lagna indicate strong spiritual merit and good fortune that supports the native's evolution.",
+    "The D9 chart becomes most relevant in the second half of life (after approximately age 35) — events triggered in later life reflect D9 more strongly than the D1.",
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Special Lagnas — BPHS Pada Adhyaya and Lagna Viveka
+# ─────────────────────────────────────────────────────────────────────────────
+
+SPECIAL_LAGNAS: dict[str, str] = {
+    "Arudha Lagna (AL)": (
+        "The Arudha Lagna (AL) is the image or maya of the native in the world — how others perceive and experience them, as opposed to their true inner nature shown by the Rashi Lagna. "
+        "It is calculated by counting the number of signs from Lagna to its lord, then projecting the same count from the lord — the resulting sign is AL. "
+        "If the lord falls in the Lagna itself or the 7th from it, use the 10th and 4th respectively. "
+        "Benefic planets in or aspecting AL give a favorable public image; malefics cause a harsh or feared reputation. "
+        "The 2nd and 12th from AL show what sustains and what destroys the native's image respectively. "
+        "Planets in the 11th from AL bring fame and social rise; planets in the 6th from AL create visible enemies. "
+        "The AL is essential for predicting social standing, reputation, and public life events."
+    ),
+    "Upapada Lagna (UL)": (
+        "The Upapada Lagna (UL) is the Arudha of the 12th house — it shows the outer manifestation and image of marriage and the spouse. "
+        "It is calculated by projecting the same method as AL but starting from the 12th house and its lord. "
+        "Benefic planets in or aspecting UL indicate a favorable, respected, and beautiful spouse; malefics (especially Mars, Saturn, Rahu) can bring difficulties in marriage or a troublesome partner. "
+        "The 2nd from UL shows the sustenance and longevity of the marriage — a strong benefic here supports a lasting union. "
+        "The 7th from UL (counter-UL) shows the possibility of a second marriage or relationships that challenge the primary union. "
+        "The UL sign and its lord's strength and dignity give specific qualities of the spouse and the style of the marriage bond."
+    ),
+    "Hora Lagna (HL)": (
+        "The Hora Lagna (HL) is a special lagna used primarily to assess wealth and financial potential in the chart. "
+        "It advances at the rate of one sign per hour from the time of birth (roughly 2.5° per minute of clock time). "
+        "Planets in or aspecting HL indicate sources and quality of wealth; benefics in HL or the 2nd from HL bless finances. "
+        "The lord of HL and its placement give the primary means through which wealth is acquired. "
+        "HL must be assessed alongside the 2nd and 11th houses of the Rashi chart and the Dhana Yogas for a complete financial picture."
+    ),
+    "Ghati Lagna (GL)": (
+        "The Ghati Lagna (GL) advances at one sign per Ghati (24 minutes) and is the fastest-moving special lagna. "
+        "GL indicates power, authority, and the native's capacity to command and influence others. "
+        "Benefics in GL or aspecting GL confer leadership ability, political power, and authority; malefics create a harsh or domineering exercise of power. "
+        "The lord of GL and its placement reveal how and where the native's power is exercised. "
+        "Strong GL with benefic influence supports political success and positions of governance or command."
+    ),
+    "Bhava Lagna (BL)": (
+        "The Bhava Lagna (BL) advances at the rate of one sign per two hours and is used to assess the overall bhava (life experience) and longevity. "
+        "BL represents the vitality of the life-force and can be used as an additional lagna for confirming house-based results. "
+        "Planets in BL or aspecting it give life themes related to those planets; benefics in BL support vitality and positive life experiences. "
+        "The conjunction or alignment of BL, HL, and GL in the same sign or house is considered very auspicious and indicates a powerful, multi-dimensional success in the native's life."
+    ),
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Muhurta rules as applied to natal timing predictions — BPHS Kala Adhyaya
+# ─────────────────────────────────────────────────────────────────────────────
+
+MUHURTA_RULES: list[str] = [
+    "For timing events in a natal chart, identify the house of the event (e.g., 7th for marriage, 5th for children) and watch for the Dasha/Antardasha of its lord, planets therein, and their dispositors.",
+    "Events are most likely to manifest when both the Mahadasha and Antardasha lords have a connection (ownership, aspect, or placement) to the relevant house — single-planet activation is rarely sufficient for major life events.",
+    "Saturn transiting the relevant event house or aspecting it during a supportive Dasha acts as a maturation trigger — Saturn forces crystallisation of pending karmas.",
+    "Jupiter's annual transit activates the houses it passes through — when Jupiter transits the house of the expected event and the Dasha supports it, events precipitate.",
+    "The Pratyantardasha (sub-sub period) of a planet connected to the natal house cusp lord often marks the exact window when an event occurs within an Antardasha.",
+    "The Ashtakavarga transit strength of the Dasha lord in its current transit sign must be checked — 4+ bindus in its own BAV confirms a productive Dasha period; fewer bindus delays results.",
+    "Eclipses (Grahan) that fall on natal planets or house cusps connected to the event house act as powerful activators within 6 months of the eclipse.",
+    "For career events, watch for the Sun's annual transit (Gochara) through the 10th house from the natal Moon alongside a supportive 10th house Dasha.",
+    "Marriage is typically triggered when the Jupiter Mahadasha or Antardasha activates the 7th lord, Venus, or the 7th house — simultaneously, Saturn should not be transiting the 7th unless it owns it.",
+    "The Narayana Dasha of the relevant house (in Jaimini system, used alongside BPHS Vimshottari) crossing the house of the event is one of the most reliable timing tools for specific life events.",
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Chara Karaka rules — BPHS Karaka Adhyaya (Jaimini Chara Karakas)
+# ─────────────────────────────────────────────────────────────────────────────
+
+KARAKA_RULES: dict[str, str] = {
+    "AtmaKaraka (AK)": (
+        "The AtmaKaraka is the planet with the highest degree in any sign in the natal chart (Rahu counted in reverse). "
+        "It represents the soul's primary desire and lesson for this lifetime — the karmic theme the native cannot escape. "
+        "The AK placed in the D9 Navamsha Lagna (Karakamsha Lagna) reveals the soul's core purpose and the divine area of focus. "
+        "Malefics as AK indicate the soul must master the difficult significations of that planet; benefics as AK give a more graceful spiritual path. "
+        "Sun as AK: soul's lesson involves ego, authority, and dharmic responsibility. Moon as AK: emotional nurturing and mind. "
+        "Mars as AK: courage, desire, and overcoming conflict. Mercury as AK: intellect and communication. "
+        "Jupiter as AK: wisdom, dharma, and expansion. Venus as AK: relationships and material beauty. Saturn as AK: discipline, karma, and service."
+    ),
+    "AmatyaKaraka (AmK)": (
+        "The AmatyaKaraka is the planet with the second-highest degree — it represents the minister or advisor of the soul, indicating career, professional path, and the means through which the AK's purpose is fulfilled. "
+        "The AmK and its sign, house placement, and dignity show the nature of the profession and career path. "
+        "Jupiter as AmK: career in teaching, law, religion, or counselling. Venus as AmK: arts, beauty, finance, or diplomacy. "
+        "Mercury as AmK: business, communication, writing, or accounting. Mars as AmK: engineering, military, surgery, or sports. "
+        "Saturn as AmK: service industries, labour, administration, or research."
+    ),
+    "BhratrKaraka (BK)": (
+        "The BhratrKaraka is the planet with the third-highest degree and represents siblings, courage, and co-workers. "
+        "It shows the quality of relationships with brothers, sisters, and close collaborators in life. "
+        "BK afflicted by malefics or in difficult signs indicates troubled sibling relationships or lack of support from them. "
+        "BK strong and well-aspected indicates supportive, prosperous siblings who advance the native's goals."
+    ),
+    "MatruKaraka (MK)": (
+        "The MatruKaraka is the planet with the fourth-highest degree and represents the mother, home, and emotional foundations. "
+        "MK's strength and sign placement reveal the quality of the mother's influence and the native's home life. "
+        "A strong MK with benefic connections gives a nurturing, supportive mother and stable home environment. "
+        "An afflicted MK indicates the mother's health or relationship challenges, or difficulties in establishing a stable home."
+    ),
+    "PutraKaraka (PK)": (
+        "The PutraKaraka is the planet with the fifth-highest degree and represents children, creativity, and past-life merit. "
+        "PK indicates the blessings of children and the quality of the native's creative intelligence. "
+        "A benefic as PK or PK well-placed in the chart gives good, intelligent children and strong past-life merit. "
+        "Malefic PK or PK in difficult houses may indicate delays in children, karmic relationship with offspring, or challenges in creative expression."
+    ),
+    "GnatiKaraka (GK)": (
+        "The GnatiKaraka is the planet with the sixth-highest degree and represents enemies, disease, competition, and obstacles — the obstructions the soul must overcome. "
+        "GK shows the source of the native's primary challenges — through the significations of the GK planet and its placement. "
+        "A strong GK in a powerful position (like exaltation) indicates powerful enemies or competition but also the strength to overcome them. "
+        "Saturn as GK: chronic obstacles through karma and service. Mars as GK: enemies through aggression. Rahu as GK: hidden or foreign adversaries."
+    ),
+    "DaraKaraka (DK)": (
+        "The DaraKaraka is the planet with the lowest degree among the seven and represents the spouse and all significant partnerships. "
+        "The DK's sign, house, and dignity reveal the nature of the spouse — their character, appearance, and the quality of the marital bond. "
+        "A benefic DK (Jupiter, Venus, or strong Moon) indicates a noble, supportive, and prosperous spouse. "
+        "Malefic DK (Saturn, Mars, or Rahu/Ketu) indicates a complex, challenging, or karmic relationship with the spouse, but not necessarily an unhappy one. "
+        "The DK placed in the D9 Navamsha chart further refines the spouse's qualities and the deeper nature of the marriage."
+    ),
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Vimshopaka Bala rules — BPHS Vimshopaka Bala Adhyaya
+# ─────────────────────────────────────────────────────────────────────────────
+
+VIMSHOPAKA_RULES: list[str] = [
+    "Vimshopaka Bala is the strength of a planet derived from its placement across multiple divisional (Varga) charts — the maximum possible score is 20 points (Vimsha = 20), representing full dignity across all relevant Vargas.",
+    "BPHS assigns different weights to different Varga charts in calculating Vimshopaka: the Shadvargas (6 divisions) use the D1, D2, D3, D9, D12, and D30; the Saptavargas (7 divisions) add D7; the Dashavargas (10 divisions) add D4, D10, and D16; the Shodashavargas (16 divisions) add all major Vargas.",
+    "A planet scoring 15–20 in Vimshopaka Bala is extremely strong and gives consistently excellent results throughout its Dasha — it can fulfil its highest significations.",
+    "A planet scoring 10–15 in Vimshopaka Bala gives moderate, generally positive results with occasional fluctuations depending on transit and Dasha support.",
+    "A planet scoring below 5 in Vimshopaka Bala is very weak and will give consistently poor, delayed, or distorted results during its Dasha period, regardless of its Rashi position.",
+    "Vimshopaka Bala is particularly useful for comparing the strength of two otherwise similar planets — when both seem strong in the D1 Rashi chart, the one with higher Vimshopaka Bala will give stronger results in practice.",
+    "A Vargottama planet (same sign in D1 and D9) automatically gains significant Vimshopaka Bala points and should be treated as one of the strongest planets in the chart for event prediction.",
+    "When assessing the strength of a Dasha lord, combine Vimshopaka Bala with Shadbala (six-fold strength from Rashi) for a complete picture: a planet strong in both Shadbala and Vimshopaka Bala can deliver outstanding Dasha results without obstruction.",
+]
