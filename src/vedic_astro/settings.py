@@ -112,11 +112,12 @@ class Settings(BaseSettings):
     anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")
 
     # ─────────────────────────────────────────────────────
-    # LLM backend  ("anthropic" | "ollama")
+    # LLM backend  ("anthropic" | "ollama" | "hf_inference")
     # ─────────────────────────────────────────────────────
-    llm_backend: str = "anthropic"          # switch to "ollama" to use local models
+    llm_backend: str = "hf_inference"       # default: free HF Inference API
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2:7b"          # model to use for all agents when backend=ollama
+    hf_inference_model: str = "Qwen/Qwen2.5-7B-Instruct"  # free HF Inference model
 
     # ─────────────────────────────────────────────────────
     # Vector store

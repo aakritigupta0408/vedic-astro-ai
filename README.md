@@ -1,362 +1,344 @@
 ---
 title: Vedic Astrology AI
 emoji: 🔯
-colorFrom: orange
+colorFrom: yellow
 colorTo: blue
-sdk: gradio
-sdk_version: "4.36.0"
+sdk: docker
 app_file: app.py
 pinned: false
 license: mit
 ---
 
-# Vedic Astrology AI
+# 🔯 Vedic Astrology AI
 
-Production-quality Vedic astrology reading system combining **deterministic Swiss Ephemeris computation** with **multi-agent LLM synthesis** (Claude Sonnet / Haiku).
+Classical Parashari readings powered by **deterministic Swiss Ephemeris computation**, **hardcoded BPHS rules**, and **multi-agent LLM synthesis**.
 
-## Architecture
+**Live demo:** https://huggingface.co/spaces/Radha006/vedic-astro-ai
+
+---
+
+## System Architecture
 
 ```
 User Query
     │
     ▼
-PipelineRunner
-    ├── Stage 1:  GEOCODE      resolve birth place → lat/lon/timezone
-    ├── Stage 2:  CHART        NatalChart (D1) — permanent Redis cache
-    ├── Stage 3:  DASHA        Vimshottari DashaWindow — permanent cache
-    ├── Stage 3:  TRANSIT      TransitOverlay — 24h Redis cache
-    ├── Stage 3:  VARGAS       D9/D10/… DivisionalCharts — permanent cache
-    ├── Stage 4:  YOGAS        Yoga/Dosha detection — permanent cache
-    ├── Stage 5:  FEATURES     AstroFeatures flat vector (no cache, derived)
-    ├── Stage 6:  SCORE        WeightedScorer breakdown (no cache, derived)
-    ├── Stage 7:  RAG          Classical rules + VedAstro cases (parallel, 7d cache)
-    ├── Stage 8:  SOLVE        5 specialist agents in parallel (prompt-cached)
-    │               ├── NatalAgent     → natal foundation narrative
-    │               ├── DashaAgent     → timing prediction
-    │               ├── TransitAgent   → gochara activation
-    │               ├── DivisionalAgent→ varga refinement
-    │               └── YogaAgent      → yoga/dosha synthesis
-    ├── Stage 9:  SYNTHESISE   SynthesisAgent — 1 LLM call (prompt-cached)
-    ├── Stage 10: CRITIQUE     CriticAgent — only if score < 0.65
-    ├── Stage 11: REVISE       ReviserAgent — only if critic fails
-    └── Stage 12: FORMAT       StructuredReading with quotes + reasoning chain
+┌─────────────────────────────────────────────────────────────────┐
+│                        Gradio UI (app.py)                       │
+│  Birth form → domain detection → ReadingRequest                 │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    PipelineRunner (pipeline.py)                  │
+│                                                                  │
+│  Stage 1 · GEOCODE    resolve place → lat/lon/timezone           │
+│  Stage 2 · CHART      NatalChart D1 via Swiss Ephemeris          │
+│  Stage 3 · DASHA      Vimshottari DashaWindow                    │
+│  Stage 3 · TRANSIT    Gochara TransitOverlay (dual-anchor)       │
+│  Stage 3 · VARGAS     D9/D10/D7 divisional charts                │
+│  Stage 4 · YOGAS      Yoga/Dosha detection engine                │
+│  Stage 5 · FEATURES   AstroFeatures flat vector                  │
+│  Stage 6 · SCORE      WeightedScorer breakdown by domain         │
+│  Stage 7 · BPHS RAG   Hardcoded rule injection per agent         │
+│  Stage 8 · SOLVE      5 specialist agents (parallel LLM calls)   │
+│               ├── NatalAgent      → natal narrative              │
+│               ├── DashaAgent      → timing narrative             │
+│               ├── TransitAgent    → gochara narrative            │
+│               ├── DivisionalAgent → varga refinement             │
+│               └── YogaAgent       → yoga/dosha narrative         │
+│  Stage 9 · SYNTHESISE  SynthesisAgent — final reading            │
+│  Stage 10· CRITIQUE    CriticAgent (only if score < 0.75)        │
+│  Stage 11· REVISE      ReviserAgent (only if critic fails)       │
+│  Stage 12· FORMAT      StructuredReading with reasoning chain    │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### LLM call budget
+### Key Design Decisions
 
-| Condition | LLM calls |
-|-----------|-----------|
-| Cache hit (same query) | **0** |
-| High-confidence path (score ≥ 0.65) | **5** (specialists + synthesis) |
-| Low-confidence + critic pass | **6** (+critic) |
-| Low-confidence + critic fail | **7** (+critic +reviser) |
-
-All LLM responses are Redis-cached for 7 days keyed by sha256(prompt).
+| Component | Choice | Reason |
+|-----------|--------|--------|
+| Ephemeris | Swiss Ephemeris (pyswisseph) | Industry-standard, sub-arcsecond accuracy |
+| Ayanamsha | Lahiri (Chitrapaksha) | Most widely used in Parashari tradition |
+| House system | Whole-sign | Standard for Parashari Jyotish |
+| Dasha | Vimshottari | Universal Parashari timing system |
+| BPHS rules | Hardcoded Python dicts | Zero latency, no vector DB needed, always available |
+| LLM routing | Pluggable backend | Anthropic / Ollama / HF Inference — swap via env var |
+| Caching | Redis (optional) | Natal charts cached permanently; LLM responses 7 days |
 
 ---
 
-## Installation
+## BPHS Rule Library
+
+The system hardcodes classical rules from **Brihat Parashara Hora Shastra** in `src/vedic_astro/rules/bphs_rules.py`:
+
+- **Planet-in-house results** — all 9 planets × 12 houses (108 aphorisms)
+- **Planet-in-sign results** — all 9 planets × 12 signs (108 aphorisms)
+- **Dignity rules** — exaltation, debilitation, own sign, Moolatrikona, Neecha Bhanga
+- **House significations** — all 12 bhavas with karakas
+- **20+ Yoga definitions** — Raj Yoga, Pancha Mahapurusha, Dhana Yoga, Viparita, etc.
+- **Dasha/Antardasha phala** — Mahadasha lord results + key antardasha combinations
+- **Domain rules** — marriage, career, wealth, health, children, travel, spirituality
+- **Transit (Gochara) rules** — Sade Sati, Gurubala, Ashtama Mangala
+- **Navamsha rules** — Vargottama, Pushkara, D9 confirmation
+- **Ashtakavarga rules** — bindu thresholds and transit quality
+- **Chara Karaka rules** — Atmakaraka through Darakaraka
+- **Special Lagna rules** — Arudha, Upapada, Hora, Ghati Lagnas
+
+At query time, `rule_selector.py` picks the 5–8 most relevant rules for **each of the 5 specialist agents** based on the actual planetary positions, active dasha lords, and query domain.
+
+---
+
+## Local Setup
 
 ### Prerequisites
 
-- Python 3.11+
-- [Swiss Ephemeris data files](https://www.astro.com/swisseph/) in `/usr/share/ephe`
-- Redis (optional, degrades gracefully without it)
-- MongoDB (optional, uses in-memory session store without it)
+- **Python 3.11+**
+- **Swiss Ephemeris files** (`sepl_18.se1`, `semo_18.se1`, `seas_18.se1`)
+- One of: Anthropic API key, Ollama, or HuggingFace token
 
-### Quick start
+### 1. Clone & install
 
 ```bash
-# 1. Clone
-git clone https://github.com/your-org/vedic-astro-ai
+git clone https://github.com/aakritigupta0408/vedic-astro-ai.git
 cd vedic-astro-ai
 
-# 2. Install (using uv — recommended)
-pip install uv
-uv sync --extra dev
-
-# or with pip
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -e .
+```
 
-# 3. Configure
+### 2. Swiss Ephemeris files
+
+The `ephe/` folder is bundled in the repo (2 MB). If missing, download:
+
+```bash
+mkdir -p ephe
+# Download from GitHub mirror:
+BASE="https://raw.githubusercontent.com/aloistr/swisseph/master/ephe"
+curl -L "$BASE/sepl_18.se1" -o ephe/sepl_18.se1
+curl -L "$BASE/semo_18.se1" -o ephe/semo_18.se1
+curl -L "$BASE/seas_18.se1" -o ephe/seas_18.se1
+```
+
+### 3. Configure `.env`
+
+Copy the example and edit:
+
+```bash
 cp .env.example .env
-# Edit .env and set ANTHROPIC_API_KEY
-
-# 4. Start services (optional but recommended)
-docker compose up -d     # starts MongoDB + Redis
-
-# 5. Run the UI
-make serve-ui            # opens Gradio at http://localhost:7860
-
-# or the API
-make serve-api           # FastAPI at http://localhost:8000
 ```
 
-### Swiss Ephemeris setup
+```env
+# ── LLM Backend (choose one) ──────────────────────────
+LLM_BACKEND=ollama          # free, local
+# LLM_BACKEND=anthropic     # paid, best quality
+# LLM_BACKEND=hf_inference  # free, cloud
 
-```bash
-# Download ephemeris files (required for chart computation)
-mkdir -p /usr/share/ephe
-cd /usr/share/ephe
-# Download from https://www.astro.com/swisseph/ephe/
-wget https://www.astro.com/ftp/swisseph/ephe/sepl_18.se1
-wget https://www.astro.com/ftp/swisseph/ephe/semo_18.se1
-wget https://www.astro.com/ftp/swisseph/ephe/seas_18.se1
-```
-
----
-
-## Configuration
-
-All settings are in `.env` (copy from `.env.example`):
-
-```bash
-# Required
+# ── Anthropic (if LLM_BACKEND=anthropic) ─────────────
 ANTHROPIC_API_KEY=sk-ant-...
 
-# Optional but recommended
-OPENCAGE_API_KEY=...          # geocoding API (falls back to 25 built-in cities)
-MONGODB_URI=mongodb://...     # session persistence (falls back to in-memory)
-REDIS_URL=redis://...         # caching (falls back to no-cache)
+# ── Ollama (if LLM_BACKEND=ollama) ───────────────────
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2:7b        # or llama3.2, mistral, etc.
 
-# Astrology settings
-SWISSEPH_PATH=/usr/share/ephe
-DEFAULT_AYANAMSHA=lahiri      # lahiri | krishnamurti | raman | yukteshwar
-RETROGRADE_DIGNITY_RULE=none  # none | kalidasa | mantreshwar
+# ── HuggingFace Inference (if LLM_BACKEND=hf_inference)
+HF_TOKEN=hf_...
+HF_INFERENCE_MODEL=Qwen/Qwen2.5-7B-Instruct
 
-# Thresholds
-CRITIC_PASS_THRESHOLD=0.75    # below → trigger reviser
-MAX_REVISION_PASSES=1
+# ── Ephemeris ─────────────────────────────────────────
+SWISSEPH_PATH=ephe
+DEFAULT_AYANAMSHA=lahiri
 ```
 
----
-
-## Offline pipelines (run once)
+### 4. Run the UI
 
 ```bash
-# 1. Place classical texts in data/raw/texts/ (*.txt or *.pdf)
-#    Suggested: BPHS, Saravali, Phaladeepika
-
-# 2. Extract structured rules
-make ingest-rules              # → data/processed/rules.json
-
-# 3. Place VedAstro dataset exports in data/raw/vedastro/ (*.json)
-make ingest-cases              # → data/raw/vedastro/cases.json
-
-# 4. Build FAISS indexes
-make build-index               # → data/embeddings/rules.index
-                               # → data/embeddings/cases.index
+PYTHONPATH=src .venv/bin/python ui/gradio_app.py
+# Open http://localhost:7860
 ```
 
 ---
 
-## Output format
+## LLM Model Options
 
-Every reading returns a `StructuredReading` with:
+### Option A — Ollama (free, local, recommended for development)
 
-```
-### Strong Positive Reading
-
-[Final narrative text answering the user's query]
-
----
-**Weighted Analysis**
-
-**Natal Foundation [35%]** — [first sentence of natal narrative]
-
-**Vimshottari Dasha Timing [30%]** — [first sentence of dasha narrative]
-
-**Gochara Transit Activation [25%]** — [first sentence of transit narrative]
-
-**Divisional Chart Refinement [10%]** — [first sentence of divisional narrative]
-
-Composite score for *career*: **0.72** (strong positive)
-
----
-**Classical References**
-
-> Quote: "Jupiter in the 9th house gives fortune and wisdom"
-> Source: *BPHS Chapter 12*
-> *(Applies because: confirms natal chart promise)*
-
-> Quote: "Saturn in 3rd from Moon in transit is favourable"
-> Source: *Phaladeepika*
-> *(Applies because: applies to current transits)*
-```
-
----
-
-## API reference
-
-### `POST /reading`
-
-```json
-{
-  "birth": {
-    "year": 1990, "month": 6, "day": 15,
-    "hour": 14,   "minute": 30,
-    "place": "Mumbai, India",
-    "timezone_str": "Asia/Kolkata"
-  },
-  "query": "What are my career prospects this year?",
-  "query_date": "2024-06-21"
-}
-```
-
-Response: `StructuredReading` serialised as JSON.
-
-### `GET /health`
-
-Returns `{"status": "ok"}`.
-
-### `GET /chart/{chart_id}`
-
-Retrieve a saved natal chart by its fingerprint ID.
-
----
-
-## Deployment on HuggingFace Spaces
-
-### Option A: Direct push
+Install Ollama from https://ollama.com, then pull a model:
 
 ```bash
-# 1. Create a new Space (Gradio SDK) at huggingface.co/spaces
-# 2. Push the repo
-git remote add hf https://huggingface.co/spaces/YOUR_USERNAME/vedic-astro-ai
-git push hf main
+# Fast, good quality (4 GB RAM)
+ollama pull qwen2:7b
+
+# Best local quality (8 GB RAM)
+ollama pull llama3.1:8b
+
+# Fastest, smallest (2 GB RAM)
+ollama pull llama3.2:3b
+
+# Multilingual, strong reasoning
+ollama pull mistral
 ```
 
-### Option B: Docker Space
-
-```bash
-# 1. Create a Docker Space at huggingface.co/spaces
-# 2. The repo's Dockerfile handles the build
-git push hf main
+Set in `.env`:
+```env
+LLM_BACKEND=ollama
+OLLAMA_MODEL=qwen2:7b
 ```
 
-### Required Secrets (HF Spaces → Settings → Repository secrets)
+### Option B — Anthropic Claude (best quality, paid)
 
-| Secret | Required | Description |
-|--------|----------|-------------|
-| `ANTHROPIC_API_KEY` | **Yes** | Claude API key |
-| `OPENCAGE_API_KEY`  | No | Geocoding (25 cities built-in as fallback) |
-| `MONGODB_URI`       | No | Session persistence (in-memory fallback) |
-| `REDIS_URL`         | No | Response caching (no-cache fallback) |
+Get an API key from https://console.anthropic.com.
 
-### Notes
+```env
+LLM_BACKEND=anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+```
 
-- Swiss Ephemeris data must be available. The Dockerfile downloads it automatically.
-- Without Redis, every request makes up to 7 LLM calls. With Redis (e.g. Redis Cloud free tier), repeated queries are served from cache at zero cost.
-- The free HF Spaces tier has 16 GB RAM — sufficient for the FAISS index and sentence-transformer model.
+The system uses `claude-sonnet-4-6` for synthesis and specialist agents.
+
+### Option C — HuggingFace Inference API (free, cloud)
+
+Get a free token from https://huggingface.co/settings/tokens.
+
+```env
+LLM_BACKEND=hf_inference
+HF_TOKEN=hf_...
+HF_INFERENCE_MODEL=Qwen/Qwen2.5-7B-Instruct
+```
+
+Free-tier models that work well:
+- `Qwen/Qwen2.5-7B-Instruct` (default)
+- `meta-llama/Meta-Llama-3.1-8B-Instruct`
+- `mistralai/Mistral-7B-Instruct-v0.2`
 
 ---
 
-## Testing
+## Optional Services
+
+Both are optional — the system degrades gracefully without them.
+
+### Redis (response caching)
 
 ```bash
-# Fast tests (no ephemeris required)
-make test-fast
+# macOS
+brew install redis && brew services start redis
 
-# All tests
-make test
-
-# Specific engine
-make test-engines
-
-# With coverage
-make test-cov
+# Docker
+docker run -d -p 6379:6379 redis:alpine
 ```
 
-Test suites cover all 6 engines (natal, dasha, transit, varga, panchang, yoga/dosha) with 200+ assertions.
+```env
+REDIS_URL=redis://localhost:6379/0
+```
+
+### MongoDB (session persistence)
+
+```bash
+# Docker
+docker run -d -p 27017:27017 mongo:7
+```
+
+```env
+MONGODB_URI=mongodb://localhost:27017
+```
 
 ---
 
-## Project structure
+## Project Structure
 
 ```
 vedic-astro-ai/
+├── app.py                          # HuggingFace Spaces entry point
+├── ephe/                           # Bundled Swiss Ephemeris files
+│   ├── sepl_18.se1
+│   ├── semo_18.se1
+│   └── seas_18.se1
 ├── src/vedic_astro/
-│   ├── engines/            # Deterministic computation (no LLM)
-│   │   ├── natal_engine.py
-│   │   ├── dasha_engine.py
-│   │   ├── transit_engine.py
-│   │   ├── varga_engine.py
-│   │   ├── panchang_engine.py
-│   │   └── yoga_dosha_engine.py
-│   ├── agents/             # LLM reasoning layer
-│   │   ├── pipeline.py         # Pipeline state machine
-│   │   ├── solver_agent.py     # High-level solver interface
-│   │   ├── output_formatter.py # Structured output + citations
-│   │   ├── natal_agent.py
-│   │   ├── dasha_agent.py
-│   │   ├── transit_agent.py
-│   │   ├── divisional_agent.py
-│   │   ├── synthesis_agent.py
-│   │   ├── critic_agent.py
-│   │   └── reviser_agent.py
-│   ├── rag/                # Retrieval-Augmented Generation
-│   │   ├── loaders.py
-│   │   ├── chunker.py
-│   │   ├── vector_store.py
-│   │   ├── embedder.py
-│   │   ├── rule_extractor.py
-│   │   ├── rule_retriever.py
-│   │   ├── case_ingester.py
-│   │   └── case_retriever.py
-│   ├── learning/           # Feature extraction + scoring
-│   │   ├── feature_builder.py
-│   │   └── scorer.py
-│   ├── storage/            # Persistence
-│   │   ├── mongo_client.py
-│   │   ├── chart_repo.py
-│   │   ├── report_repo.py
-│   │   └── session_store.py
-│   ├── tools/              # Shared utilities
-│   │   ├── cache.py
-│   │   ├── hasher.py
-│   │   ├── geo.py
-│   │   ├── llm_client.py
-│   │   └── datetime_utils.py
-│   ├── api.py              # FastAPI endpoints
-│   └── settings.py         # Pydantic Settings
-├── ui/
-│   ├── gradio_app.py       # Full Gradio UI
-│   └── app.py              # Legacy entry
-├── tests/
-│   └── engines/            # 200+ unit tests
-├── scripts/
-│   ├── extract_rules.py    # Classical text → structured rules
-│   ├── ingest_vedastro.py  # VedAstro dataset ingestion
-│   └── build_index.py      # FAISS index builder
-├── data/
-│   ├── raw/
-│   │   ├── texts/          # Classical astrology texts (*.txt, *.pdf)
-│   │   └── vedastro/       # VedAstro dataset exports
-│   ├── processed/
-│   │   └── rules.json      # Extracted structured rules
-│   └── embeddings/         # FAISS indexes
-├── app.py                  # HF Spaces entry point
-├── requirements.txt
-├── pyproject.toml
-├── Makefile
-├── Dockerfile
-└── docker-compose.yml
+│   ├── engines/
+│   │   ├── natal_engine.py         # Swiss Ephemeris → NatalChart
+│   │   ├── dasha_engine.py         # Vimshottari dasha computation
+│   │   ├── transit_engine.py       # Gochara overlay
+│   │   ├── varga_engine.py         # Divisional charts (D9, D10…)
+│   │   ├── yoga_dosha_engine.py    # Yoga/dosha detection
+│   │   └── panchang_engine.py      # Tithi, nakshatra, vara
+│   ├── agents/
+│   │   ├── pipeline.py             # Main pipeline orchestrator
+│   │   ├── natal_agent.py          # Natal chart specialist
+│   │   ├── dasha_agent.py          # Dasha timing specialist
+│   │   ├── transit_agent.py        # Gochara specialist
+│   │   ├── divisional_agent.py     # Varga specialist
+│   │   ├── synthesis_agent.py      # Final synthesis
+│   │   ├── critic_agent.py         # Quality reviewer
+│   │   └── reviser_agent.py        # Auto-reviser
+│   ├── rules/
+│   │   ├── bphs_rules.py           # Hardcoded BPHS aphorisms
+│   │   └── rule_selector.py        # Context-aware rule picker
+│   ├── learning/
+│   │   ├── feature_builder.py      # AstroFeatures flat vector
+│   │   └── scorer.py               # WeightedScorer by domain
+│   ├── tools/
+│   │   ├── llm_client.py           # Multi-backend LLM client
+│   │   ├── cache.py                # Redis cache wrapper
+│   │   └── geo.py                  # Place → lat/lon/timezone
+│   └── settings.py                 # Pydantic settings from .env
+└── ui/
+    └── gradio_app.py               # Gradio 5 web interface
 ```
 
 ---
 
-## Classical texts supported
+## HuggingFace Spaces Deployment
 
-| Text | Language | Domain |
-|------|----------|--------|
-| Brihat Parashara Hora Shastra (BPHS) | Sanskrit/Translation | All |
-| Saravali | Sanskrit/Translation | Natal |
-| Phaladeepika | Sanskrit/Translation | Natal, Dasha |
-| Jataka Parijata | Sanskrit/Translation | Natal |
-| Uttara Kalamrita | Sanskrit/Translation | Dasha |
+The space at `Radha006/vedic-astro-ai` uses the Docker SDK with:
+- Python 3.11-slim base image
+- Bundled ephemeris files (no download at runtime)
+- `HF_TOKEN` secret for free Inference API access
+- `Qwen/Qwen2.5-7B-Instruct` as the default model
 
-Place `.txt` or `.pdf` files in `data/raw/texts/` and run `make ingest-rules`.
+To redeploy after local changes:
+
+```bash
+hf upload Radha006/vedic-astro-ai . --type space --commit-message "Update"
+```
+
+---
+
+## Architecture Decisions — Deep Dive
+
+### Why hardcode BPHS rules instead of RAG?
+
+A vector database requires:
+1. Text corpus ingestion
+2. Embedding model running at query time
+3. Index files (100s of MB) stored somewhere
+4. Cold-start latency
+
+Hardcoded rules have zero infrastructure cost, zero latency, and are deterministically correct. The `rule_selector.py` acts as a "smart lookup" — given the actual planetary positions in a chart, it pulls exactly the rules that apply (e.g., "Sun in 10th house" or "Jupiter-Saturn antardasha").
+
+### Why multi-agent instead of one big prompt?
+
+Each specialist agent gets a focused, smaller context window:
+- NatalAgent sees only natal chart data + natal BPHS rules
+- DashaAgent sees only dasha window data + dasha timing rules
+- TransitAgent sees only transit overlay + gochara rules
+
+This fits comfortably in small models (7B parameters) that have limited context windows. Five parallel 600-token calls finish faster than one 3000-token call. The SynthesisAgent then combines all five narratives into the final reading.
+
+### Scoring system
+
+The `WeightedScorer` computes a 0–1 score across six layers:
+
+| Layer | Weight | What it measures |
+|-------|--------|-----------------|
+| Yoga support | 30% | Active benefic yogas for the domain |
+| Dasha activation | 25% | Dasha lord's alignment with query domain |
+| Transit trigger | 20% | Favorable transits for the domain |
+| Dignity base | 15% | Planetary strength of domain karakas |
+| Dosha penalty | −10% | Active doshas harming the domain |
+| Bhava strength | 10% | Strength of the key house for domain |
+
+Score < 0.65 → CriticAgent reviews → ReviserAgent improves if needed.
 
 ---
 

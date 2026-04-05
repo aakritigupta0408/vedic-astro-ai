@@ -361,19 +361,39 @@ class PipelineRunner:
     # ── Stage: RAG ────────────────────────────────────────────────────────
 
     async def stage_rag(self, state: PipelineState) -> None:
-        """Parallel retrieval of rules (per domain) and cases."""
+        """
+        Inject hardcoded BPHS rules + attempt RAG retrieval (graceful fallback).
+
+        Hardcoded rules from bphs_rules.py are always available and selected
+        per agent/domain. RAG retrieval from the vector store is attempted
+        and merged if available, otherwise ignored.
+        """
         if state.retrieved_rules:
             return
 
-        async def get_rules(domain_key: str, query_suffix: str) -> tuple[str, list[str]]:
+        domain = state.request.domain or "general"
+
+        # 1. Select hardcoded BPHS rules for each agent
+        try:
+            from vedic_astro.rules.rule_selector import select_all_rules
+            natal_data   = self._serialise_chart(state.chart)
+            dasha_data   = self._serialise_dasha(state.dasha_window)
+            transit_data = self._serialise_transit(state.transit_overlay)
+            yoga_data    = self._serialise_yogas(state.yoga_bundle, state.score)
+            bphs_rules = select_all_rules(natal_data, dasha_data, transit_data, yoga_data, domain)
+        except Exception:
+            bphs_rules = {}
+
+        # 2. Attempt RAG retrieval (may be empty if index not built)
+        async def get_rag_rules(domain_key: str, query_suffix: str) -> tuple[str, list[str]]:
             try:
                 from vedic_astro.rag.rule_retriever import retrieve_rules_for_domain
                 rules = await retrieve_rules_for_domain(
-                    f"{state.request.query} {query_suffix}", domain_key, top_k=5
+                    f"{state.request.query} {query_suffix}", domain_key, top_k=3
                 )
+                return domain_key, rules
             except Exception:
-                rules = []
-            return domain_key, rules
+                return domain_key, []
 
         async def get_cases() -> list[str]:
             try:
@@ -385,18 +405,22 @@ class PipelineRunner:
             except Exception:
                 return []
 
-        results = await asyncio.gather(
-            get_rules("natal",      "natal chart planet house"),
-            get_rules("dasha",      "dasha period timing"),
-            get_rules("transit",    "gochara transit"),
-            get_rules("divisional", "varga divisional navamsha"),
-            get_rules("yoga",       "yoga dosha combination"),
+        rag_results = await asyncio.gather(
+            get_rag_rules("natal",      "natal chart planet house"),
+            get_rag_rules("dasha",      "dasha period timing"),
+            get_rag_rules("transit",    "gochara transit"),
+            get_rag_rules("divisional", "varga divisional navamsha"),
+            get_rag_rules("yoga",       "yoga dosha combination"),
             get_cases(),
         )
 
-        for key, rules in results[:5]:
-            state.retrieved_rules[key] = rules
-        state.retrieved_cases = results[5]
+        # 3. Merge: BPHS rules first, then RAG additions
+        for key, rag_rules in rag_results[:5]:
+            hardcoded = bphs_rules.get(key, [])
+            merged = hardcoded + [r for r in rag_rules if r not in hardcoded]
+            state.retrieved_rules[key] = merged
+
+        state.retrieved_cases = rag_results[5]
         state.mark_done("rag")
 
     # ── Stage: solve (parallel specialist agents) ─────────────────────────

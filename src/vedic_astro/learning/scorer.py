@@ -458,6 +458,7 @@ class WeightedScorer:
 
         relevant = _YOGA_DOMAIN_RELEVANCE.get(domain, set())
 
+        relevant_names = []
         if relevant:
             # Score only domain-relevant yogas
             relevant_names = [

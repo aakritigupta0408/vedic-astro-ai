@@ -1,65 +1,71 @@
 """
-gradio_app.py — Full Gradio 4.x interface for Vedic Astrology AI.
+gradio_app.py — Vedic Astrology AI · Gradio 5.x interface
 
-Layout (3-column Blocks)
-------------------------
-┌──────────────┬────────────────────────────┬────────────────────────┐
-│ Birth Form   │  Chat Interface            │  Evidence Panels       │
-│              │                            │                        │
-│ [fields]     │  [Chat history]            │  Chart       [▶]       │
-│              │  [Query input]             │  Dasha       [▶]       │
-│ [Submit]     │  [Ask] [Clear]             │  Transit     [▶]       │
-│              │                            │  Yogas/Doshas[▶]       │
-│ Domain:      │  Reasoning Chain           │  Score Weights[▶]      │
-│ [select]     │  [Step cards]              │  Rules       [▶]       │
-│              │                            │  Cases       [▶]       │
-│ □ Debug      │                            │  Critic Notes[▶]       │
-│              │                            │  Debug JSON  [▶]       │
-└──────────────┴────────────────────────────┴────────────────────────┘
-
-All evidence panels are lazy-updated after each query.
-Debug panel is hidden by default; toggled by the checkbox.
+Layout
+------
+┌─────────────────────────────────────────────────────────────────┐
+│  Header: title + subtitle + status badge                        │
+├──────────────┬──────────────────────────┬───────────────────────┤
+│ Birth Form   │  Chat                    │  Analysis Panels      │
+│  Year/Mo/Day │  [Chat history]          │  🪐 Natal Chart        │
+│  Hour/Min    │  [Query input]           │  ⏳ Dasha Timing       │
+│  Place       │  [Ask] [Clear]           │  🌍 Gochara Transits   │
+│  Lat/Lon     │                          │  ✨ Yogas & Doshas     │
+│  Domain      │  BPHS Rules Applied      │  📖 BPHS Rules Used   │
+│  Date        │  [rules list]            │  ⚖️ Score Breakdown    │
+│  [Ask]       │                          │  🔍 Critic Notes       │
+└──────────────┴──────────────────────────┴───────────────────────┘
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 from datetime import date
-from typing import Any, Optional
 
 import gradio as gr
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+CSS = """
+.app-header { text-align: center; padding: 1.2rem 0 0.4rem; }
+.app-header h1 { font-size: 2rem; font-weight: 700; color: #b45309; margin: 0; }
+.app-header p  { color: #6b7280; margin: 0.3rem 0 0; }
+.status-ok   { color: #16a34a; font-weight: 600; }
+.status-err  { color: #dc2626; font-weight: 600; }
+.bphs-rule   { background: #fffbeb; border-left: 3px solid #d97706;
+               padding: 0.4rem 0.7rem; margin: 0.3rem 0;
+               border-radius: 0 4px 4px 0; font-size: 0.85rem; }
+.section-label { font-size: 0.75rem; font-weight: 600;
+                 text-transform: uppercase; color: #9ca3af;
+                 letter-spacing: 0.05em; margin-bottom: 0.3rem; }
+.reading-box textarea { font-size: 0.95rem; line-height: 1.6; }
+footer { display: none !important; }
+"""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Async bridge
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _run_async(coro):
-    """Run an async coroutine from sync Gradio handlers."""
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, coro)
-                return future.result(timeout=120)
+                return pool.submit(asyncio.run, coro).result(timeout=180)
         return loop.run_until_complete(coro)
     except RuntimeError:
         return asyncio.run(coro)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Pipeline runner (lazy singleton)
+# Lazy solver singleton
 # ─────────────────────────────────────────────────────────────────────────────
 
 _solver = None
-
 
 def get_solver():
     global _solver
@@ -70,18 +76,19 @@ def get_solver():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Domain detection from query
+# Domain auto-detection
 # ─────────────────────────────────────────────────────────────────────────────
 
 _DOMAIN_KW = {
-    "career":  ["career", "job", "work", "profession", "business", "promotion"],
-    "marriage": ["marriage", "spouse", "partner", "relationship", "wedding"],
-    "wealth":  ["wealth", "money", "finance", "rich", "income", "property"],
-    "health":  ["health", "disease", "illness", "surgery", "longevity"],
-    "spirituality": ["spiritual", "meditation", "dharma", "moksha"],
-    "children": ["child", "children", "baby", "son", "daughter"],
+    "career":       ["career", "job", "work", "profession", "business", "promotion", "office"],
+    "marriage":     ["marriage", "spouse", "partner", "relationship", "wedding", "love", "husband", "wife"],
+    "wealth":       ["wealth", "money", "finance", "rich", "income", "property", "savings"],
+    "health":       ["health", "disease", "illness", "surgery", "longevity", "body", "sick"],
+    "spirituality": ["spiritual", "meditation", "dharma", "moksha", "karma", "soul"],
+    "children":     ["child", "children", "baby", "son", "daughter", "pregnancy"],
+    "travel":       ["travel", "foreign", "abroad", "move", "relocate", "journey"],
+    "family":       ["family", "mother", "father", "sibling", "home", "house"],
 }
-
 
 def auto_domain(query: str, explicit: str) -> str:
     if explicit and explicit != "auto":
@@ -94,7 +101,7 @@ def auto_domain(query: str, explicit: str) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Core handler
+# Core query handler
 # ─────────────────────────────────────────────────────────────────────────────
 
 def handle_query(
@@ -102,141 +109,144 @@ def handle_query(
     query, domain_sel, query_date_str,
     chat_history, session_state,
 ):
-    """
-    Main Gradio submit handler.
+    if not str(query).strip():
+        empty_df = pd.DataFrame(columns=["Layer", "Weight %", "Score", "Rating"])
+        return (chat_history, session_state, "", "", "", "", "", empty_df, "", "", [])
 
-    Returns updated values for: chat, all evidence panels, session_state.
-    """
-    if not query.strip():
-        return (chat_history, session_state,
-                "", "", "", "", "", "", "", "", {})
-
-    # ── Parse birth data ──────────────────────────────────────────────────
     from vedic_astro.agents.pipeline import BirthData, ReadingRequest
 
-    lat = float(lat_str) if lat_str.strip() else None
-    lon = float(lon_str) if lon_str.strip() else None
+    lat = float(lat_str) if str(lat_str).strip() else None
+    lon = float(lon_str) if str(lon_str).strip() else None
     birth = BirthData(
         year=int(year), month=int(month), day=int(day),
         hour=int(hour), minute=int(minute),
-        place=place.strip(),
-        lat=lat, lon=lon,
+        place=str(place).strip(), lat=lat, lon=lon,
     )
 
     try:
-        qdate = date.fromisoformat(query_date_str.strip()) if query_date_str.strip() else None
+        qdate = date.fromisoformat(str(query_date_str).strip()) if str(query_date_str).strip() else None
     except ValueError:
         qdate = None
 
-    domain = auto_domain(query, domain_sel)
+    domain = auto_domain(str(query), domain_sel)
 
-    # ── Run pipeline ──────────────────────────────────────────────────────
     try:
         result = _run_async(get_solver().solve(
-            birth=birth,
-            query=query,
-            domain=domain,
-            query_date=qdate,
+            birth=birth, query=str(query), domain=domain, query_date=qdate,
         ))
         reading = result.reading
     except Exception as exc:
         logger.exception("Pipeline error")
-        error_msg = f"**Error:** {exc}\n\nCheck that birth data is complete and ANTHROPIC_API_KEY is set."
-        new_history = chat_history + [[query, error_msg]]
-        return (new_history, session_state,
-                "", "", "", "", "", "", "", "", {})
+        empty_df = pd.DataFrame(columns=["Layer", "Weight %", "Score", "Rating"])
+        error_md = f"**Error:** {exc}"
+        new_history = chat_history + [[str(query), error_md]]
+        return (new_history, session_state, "", "", "", "", "", empty_df, error_md, {}, "*—*")
 
-    # ── Save to session ────────────────────────────────────────────────────
-    _run_async(_save_to_session(session_state, birth, reading))
+    _run_async(_save_session(session_state, birth, reading))
 
-    # ── Update chat ────────────────────────────────────────────────────────
-    response_md = reading.to_markdown()
-    new_history = chat_history + [[query, response_md]]
+    response_md = reading.to_markdown() if hasattr(reading, "to_markdown") else str(reading.final_reading)
+    new_history = chat_history + [[str(query), response_md]]
 
-    # ── Evidence panels ────────────────────────────────────────────────────
-    chart_md     = _render_chart(reading)
-    dasha_md     = _render_dasha(reading)
-    transit_md   = _render_transit(reading)
-    yoga_md      = _render_yogas(reading)
-    weights_df   = _render_weights(reading)
-    rules_md     = _render_rules(reading)
-    cases_md     = _render_cases(reading)
-    critic_md    = _render_critic(reading)
-    debug_data   = reading.to_debug_dict()
+    chart_md    = _render_chart(reading)
+    dasha_md    = _render_dasha(reading)
+    transit_md  = _render_transit(reading)
+    yoga_md     = _render_yogas(reading)
+    bphs_md     = _render_bphs_rules(reading)
+    weights_df  = _render_weights(reading)
+    critic_md   = _render_critic(reading)
+    debug_json  = reading.to_debug_dict() if hasattr(reading, "to_debug_dict") else {}
+    bphs_list   = _bphs_rule_list(reading)
 
     return (
         new_history, session_state,
         chart_md, dasha_md, transit_md, yoga_md,
-        weights_df, rules_md, cases_md, critic_md,
-        debug_data,
+        bphs_md, weights_df, critic_md, debug_json,
+        bphs_list,
     )
 
 
-async def _save_to_session(session_state: dict, birth, reading) -> None:
+async def _save_session(session_state, birth, reading):
     try:
         from vedic_astro.storage.session_store import SessionStoreFactory
         store = await SessionStoreFactory.create()
-        session_id = session_state.get("session_id")
-        if not session_id:
-            birth_dict = {
-                "year": birth.year, "month": birth.month, "day": birth.day,
-                "hour": birth.hour, "minute": birth.minute, "place": birth.place,
-            }
-            session_id = await store.create_session(birth_dict, reading.chart_id)
-            session_state["session_id"] = session_id
+        sid = session_state.get("session_id")
+        if not sid:
+            birth_dict = {k: getattr(birth, k) for k in ("year","month","day","hour","minute","place")}
+            sid = await store.create_session(birth_dict, reading.chart_id)
+            session_state["session_id"] = sid
         await store.add_query(
-            session_id=session_id,
-            query=reading.query,
+            session_id=sid, query=reading.query,
             domain=reading.score.domain,
             reading_summary=reading.final_reading[:300],
             score=reading.score.final_score,
             interpretation=reading.score.interpretation,
             was_revised=reading.was_revised,
         )
-    except Exception as exc:
-        logger.debug("Session save failed: %s", exc)
+    except Exception:
+        pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Evidence panel renderers
+# Panel renderers
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _render_chart(reading) -> str:
     if not reading.natal_narrative:
-        return "*No chart data*"
-    return f"**Natal Analysis**\n\n{reading.natal_narrative}"
+        return "*No natal data computed.*"
+    score_line = ""
+    if hasattr(reading, "score") and reading.score:
+        score_line = f"\n\n**Composite Score:** `{reading.score.final_score:.2f}` — *{reading.score.interpretation.replace('_',' ').title()}*"
+    return f"**Natal Analysis**\n\n{reading.natal_narrative}{score_line}"
 
 
 def _render_dasha(reading) -> str:
     if not reading.dasha_narrative:
-        return "*No dasha data*"
-    lines = [
-        f"**Dasha Timing**",
-        "",
-        reading.dasha_narrative,
-        "",
-        f"**Score:** {reading.score.dasha_activation:.2f}",
-    ]
-    return "\n".join(lines)
+        return "*No dasha data.*"
+    score_line = ""
+    if hasattr(reading, "score") and reading.score:
+        score_line = f"\n\n**Dasha Activation Score:** `{reading.score.dasha_activation:.2f}`"
+    return f"**Vimshottari Dasha**\n\n{reading.dasha_narrative}{score_line}"
 
 
 def _render_transit(reading) -> str:
     if not reading.transit_narrative:
-        return "*No transit data*"
-    lines = [
-        "**Gochara (Transit) Analysis**",
-        "",
-        reading.transit_narrative,
-        "",
-        f"**Score:** {reading.score.transit_trigger:.2f}",
-    ]
-    return "\n".join(lines)
+        return "*No transit data.*"
+    score_line = ""
+    if hasattr(reading, "score") and reading.score:
+        score_line = f"\n\n**Transit Trigger Score:** `{reading.score.transit_trigger:.2f}`"
+    return f"**Gochara (Transit) Analysis**\n\n{reading.transit_narrative}{score_line}"
 
 
 def _render_yogas(reading) -> str:
     if not reading.yoga_narrative:
-        return "*No yoga/dosha data*"
+        return "*No yoga/dosha data.*"
     return f"**Yogas & Doshas**\n\n{reading.yoga_narrative}"
+
+
+def _render_bphs_rules(reading) -> str:
+    rules = getattr(reading, "retrieved_rules", {})
+    if not rules:
+        return "*No classical rules retrieved.*"
+    lines = ["**Classical BPHS Rules Applied**\n"]
+    for agent, rule_list in rules.items():
+        if rule_list:
+            lines.append(f"**{agent.title()}:**")
+            for r in rule_list[:4]:
+                lines.append(f"> {r}")
+            lines.append("")
+    return "\n".join(lines) if len(lines) > 1 else "*No rules applied.*"
+
+
+def _bphs_rule_list(reading) -> str:
+    """Markdown string of top BPHS rules for sidebar highlights."""
+    rules = getattr(reading, "retrieved_rules", {})
+    flat = []
+    for agent, rule_list in rules.items():
+        for r in rule_list[:2]:
+            flat.append(f"**{agent.title()}:** {r}")
+    if not flat:
+        return "*No rules applied.*"
+    return "\n\n".join(f"> {r}" for r in flat[:10])
 
 
 def _render_weights(reading) -> pd.DataFrame:
@@ -251,153 +261,101 @@ def _render_weights(reading) -> pd.DataFrame:
     if not rows:
         return pd.DataFrame(columns=["Layer", "Weight %", "Score", "Rating"])
     df = pd.DataFrame(rows)
-    # Add summary row
-    final = reading.score.final_score
     df.loc[len(df)] = {
-        "Layer": "**COMPOSITE**",
+        "Layer": "COMPOSITE",
         "Weight %": 100,
-        "Score": f"{final:.2f}",
+        "Score": f"{reading.score.final_score:.2f}",
         "Rating": reading.score.interpretation.replace("_", " ").title(),
     }
     return df
 
 
-def _render_rules(reading) -> str:
-    lines = []
-    for domain, rules in reading.retrieved_rules.items():
-        if rules:
-            lines.append(f"**{domain.title()} rules:**")
-            for r in rules[:3]:
-                lines.append(f"- {r}")
-    if reading.supporting_quotes:
-        lines += ["", "**Citations used:**"]
-        for q in reading.supporting_quotes:
-            lines += [
-                f"> Quote: \"{q.text}\"",
-                f"> Source: *{q.source}*",
-                "",
-            ]
-    return "\n".join(lines) if lines else "*No rules retrieved*"
-
-
-def _render_cases(reading) -> str:
-    if not reading.retrieved_cases:
-        return "*No similar cases found*"
-    lines = ["**Similar reference cases:**", ""]
-    for i, case in enumerate(reading.retrieved_cases, 1):
-        lines.append(f"**{i}.** {case}")
-        lines.append("")
-    return "\n".join(lines)
-
-
 def _render_critic(reading) -> str:
+    score = reading.score.final_score if reading.score else 0
     if not reading.critic_notes:
-        if reading.score.final_score >= 0.65:
-            return "✅ Critic skipped (high-confidence reading)"
-        return "✅ Critic passed — no issues found"
+        if score >= 0.65:
+            return f"✅ **Critic passed** — high-confidence reading (score: {score:.2f})"
+        return "✅ Critic passed — no issues found."
     lines = [
-        f"**Critic score:** {reading.score.final_score:.2f}",
-        f"**Was revised:** {'Yes' if reading.was_revised else 'No'}",
+        f"**Critic Score:** `{score:.2f}`  |  **Revised:** {'Yes' if reading.was_revised else 'No'}",
         "",
-        "**Issues found:**",
+        "**Issues flagged:**",
     ]
     for note in reading.critic_notes:
         lines.append(f"- {note}")
     return "\n".join(lines)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Reasoning chain renderer
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _render_reasoning_chain(reading) -> str:
-    if not reading.reasoning_chain:
-        return ""
-    lines = ["### Reasoning Chain", ""]
-    for step in reading.reasoning_chain:
-        score_bar = "█" * int(step.component_score * 10) + "░" * (10 - int(step.component_score * 10))
-        lines += [
-            f"**{step.label}** (weight {step.weight_pct}%) — {score_bar} {step.component_score:.2f}",
-            "",
-            step.finding[:250] + ("…" if len(step.finding) > 250 else ""),
-            "",
-        ]
-    return "\n".join(lines)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Clear handler
-# ─────────────────────────────────────────────────────────────────────────────
-
 def handle_clear(session_state):
     empty_df = pd.DataFrame(columns=["Layer", "Weight %", "Score", "Rating"])
-    return ([], session_state, "", "", "", "", empty_df, "", "", "", {})
+    return ([], session_state, "", "", "", "", "", empty_df, "", {}, "*—*")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Gradio UI definition
+# UI definition
 # ─────────────────────────────────────────────────────────────────────────────
 
 def build_demo() -> gr.Blocks:
-    with gr.Blocks(
-        title="Vedic Astrology AI",
-        theme=gr.themes.Soft(primary_hue="orange", secondary_hue="blue"),
-        css="""
-        .chat-box { min-height: 420px; }
-        .score-badge { font-weight: bold; color: #d4710a; }
-        #query-row { align-items: flex-end; }
-        """,
-    ) as demo:
 
-        # ── Session state ─────────────────────────────────────────────────
+    with gr.Blocks(title="Vedic Astrology AI", css=CSS) as demo:
+
         session_state = gr.State({})
 
         # ── Header ────────────────────────────────────────────────────────
-        gr.Markdown(
-            "# 🔯 Vedic Astrology AI\n"
-            "Classical Parashari readings · Deterministic computation · "
-            "Multi-agent LLM synthesis"
-        )
+        gr.HTML("""
+        <div class="app-header">
+          <h1>🔯 Vedic Astrology AI</h1>
+          <p>Classical Parashari readings · Swiss Ephemeris computation ·
+             Hardcoded BPHS rules · Multi-agent LLM synthesis</p>
+        </div>
+        """)
 
         with gr.Row(equal_height=False):
 
             # ── Column 1: Birth Form ──────────────────────────────────────
-            with gr.Column(scale=1, min_width=220):
-                gr.Markdown("### Birth Details")
+            with gr.Column(scale=1, min_width=230):
 
+                gr.Markdown("### 🗓 Birth Details")
                 with gr.Group():
-                    year   = gr.Number(label="Year",    value=1990, precision=0, minimum=1800, maximum=2100)
-                    month  = gr.Number(label="Month",   value=6,    precision=0, minimum=1,    maximum=12)
-                    day    = gr.Number(label="Day",     value=15,   precision=0, minimum=1,    maximum=31)
-                    hour   = gr.Number(label="Hour (24h)", value=14, precision=0, minimum=0, maximum=23)
-                    minute = gr.Number(label="Minute",  value=30,   precision=0, minimum=0,    maximum=59)
-
-                with gr.Group():
+                    with gr.Row():
+                        day   = gr.Number(label="Day",   value=15,   precision=0, minimum=1,  maximum=31,   scale=1)
+                        month = gr.Number(label="Month", value=6,    precision=0, minimum=1,  maximum=12,   scale=1)
+                        year  = gr.Number(label="Year",  value=1990, precision=0, minimum=1800, maximum=2100, scale=2)
+                    with gr.Row():
+                        hour   = gr.Number(label="Hour (24h)", value=14, precision=0, minimum=0, maximum=23, scale=1)
+                        minute = gr.Number(label="Minute",     value=30, precision=0, minimum=0, maximum=59, scale=1)
                     place   = gr.Textbox(label="Birth Place", placeholder="Mumbai, India")
-                    lat_str = gr.Textbox(label="Lat (optional)", placeholder="19.076")
-                    lon_str = gr.Textbox(label="Lon (optional)", placeholder="72.877")
+                    with gr.Row():
+                        lat_str = gr.Textbox(label="Lat (opt)", placeholder="19.076", scale=1)
+                        lon_str = gr.Textbox(label="Lon (opt)", placeholder="72.877", scale=1)
 
-                gr.Markdown("### Query Options")
+                gr.Markdown("### 🎯 Query Options")
                 domain_sel = gr.Dropdown(
-                    choices=["auto", "general", "career", "marriage", "wealth",
-                              "health", "spirituality", "children"],
-                    value="auto",
-                    label="Domain",
+                    choices=["auto","general","career","marriage","wealth",
+                             "health","spirituality","children","travel","family","social_standing"],
+                    value="auto", label="Domain",
                 )
                 query_date_str = gr.Textbox(
-                    label="Transit Date (blank = today)",
-                    placeholder="2024-06-21",
+                    label="Transit Date (blank = today)", placeholder="2026-06-01",
                 )
-                debug_mode = gr.Checkbox(label="Debug Mode", value=False)
 
-            # ── Column 2: Chat ────────────────────────────────────────────
+                ask_btn   = gr.Button("✨ Get Reading", variant="primary", size="lg")
+                clear_btn = gr.Button("🗑 Clear", size="sm")
+
+                gr.Markdown("---")
+                gr.Markdown("**About**\n\nEnter birth details, ask a question about any life area. "
+                            "The system computes a full Parashari chart, runs 5 specialist agents "
+                            "with hardcoded BPHS rules, and synthesises a classical reading.")
+
+            # ── Column 2: Chat + BPHS rules sidebar ──────────────────────
             with gr.Column(scale=3):
+
                 chatbot = gr.Chatbot(
                     label="Reading",
-                    height=420,
-                    elem_classes=["chat-box"],
-                    bubble_full_width=False,
+                    height=440,
+                    type="tuples",
                     show_copy_button=True,
+                    placeholder="*Enter birth details and ask a question to receive your Vedic reading.*",
                 )
 
                 with gr.Row(elem_id="query-row"):
@@ -406,60 +364,70 @@ def build_demo() -> gr.Blocks:
                         placeholder="What does my chart say about career in the next 6 months?",
                         lines=2,
                         scale=5,
+                        show_label=True,
                     )
-                    with gr.Column(scale=1, min_width=100):
+                    with gr.Column(scale=1, min_width=90):
                         submit_btn = gr.Button("Ask ➤", variant="primary")
-                        clear_btn  = gr.Button("Clear")
 
-                # Reasoning chain (shown below chat)
-                reasoning_display = gr.Markdown(
-                    value="*Submit a query to see the weighted reasoning chain.*",
-                    label="Reasoning Chain",
+                gr.Markdown("#### 📖 BPHS Rules Applied to This Reading")
+                bphs_highlights = gr.Markdown(
+                    value="*Rules will appear here after a query.*",
+                    elem_id="bphs-list",
                 )
 
             # ── Column 3: Evidence Panels ─────────────────────────────────
             with gr.Column(scale=2):
-                gr.Markdown("### Evidence")
 
-                with gr.Accordion("📊 Chart & Natal", open=False):
+                gr.Markdown("### 📊 Analysis Panels")
+
+                with gr.Accordion("🪐 Natal Chart", open=True):
                     chart_panel = gr.Markdown("*—*")
 
                 with gr.Accordion("⏳ Dasha Timing", open=False):
                     dasha_panel = gr.Markdown("*—*")
 
-                with gr.Accordion("🌍 Transit (Gochara)", open=False):
+                with gr.Accordion("🌍 Gochara Transits", open=False):
                     transit_panel = gr.Markdown("*—*")
 
                 with gr.Accordion("✨ Yogas & Doshas", open=False):
                     yoga_panel = gr.Markdown("*—*")
 
-                with gr.Accordion("⚖️ Score Weights", open=True):
+                with gr.Accordion("📖 All BPHS Rules", open=False):
+                    bphs_panel = gr.Markdown("*—*")
+
+                with gr.Accordion("⚖️ Score Breakdown", open=False):
                     weights_panel = gr.DataFrame(
-                        headers=["Layer", "Weight %", "Score", "Rating"],
-                        datatype=["str", "number", "str", "str"],
+                        value=pd.DataFrame(columns=["Layer","Weight %","Score","Rating"]),
                         interactive=False,
                     )
-
-                with gr.Accordion("📜 Retrieved Rules", open=False):
-                    rules_panel = gr.Markdown("*—*")
-
-                with gr.Accordion("🗃️ Similar Cases", open=False):
-                    cases_panel = gr.Markdown("*—*")
 
                 with gr.Accordion("🔍 Critic Notes", open=False):
                     critic_panel = gr.Markdown("*—*")
 
-                with gr.Accordion("🐛 Debug JSON", open=False, visible=False) as debug_accordion:
+                with gr.Accordion("🐛 Debug JSON", open=False):
                     debug_panel = gr.JSON(label="Pipeline debug data")
 
-        # ── Event wiring ──────────────────────────────────────────────────
+        # ── Examples ──────────────────────────────────────────────────────
+        gr.Examples(
+            examples=[
+                [15, 6, 1990, 14, 30, "Mumbai, India",  "", "", "What does my chart say about career prospects this year?",    "career",       ""],
+                [21, 3, 1985,  8,  0, "New Delhi, India","","", "When is a good time for marriage based on my dasha?",          "marriage",     ""],
+                [4,  8, 1994,  1, 50, "Delhi, India",   "", "", "What is my current dasha period and what does it mean?",       "general",      ""],
+                [5, 11, 1975, 22, 15, "London",         "", "", "What yogas do I have and how strong are they?",                "general",      ""],
+                [12, 1, 1988, 10, 20, "Chennai, India", "", "", "How is my health and what precautions should I take?",         "health",       ""],
+                [7,  4, 1995, 18, 45, "Singapore",      "", "", "Will I settle abroad? What does my chart indicate about travel?","travel",      ""],
+            ],
+            inputs=[day, month, year, hour, minute, place, lat_str, lon_str,
+                    query_input, domain_sel, query_date_str],
+            label="📋 Example Charts & Queries",
+        )
 
-        # All outputs from handle_query
+        # ── Outputs list ──────────────────────────────────────────────────
         all_outputs = [
             chatbot, session_state,
             chart_panel, dasha_panel, transit_panel, yoga_panel,
-            weights_panel, rules_panel, cases_panel, critic_panel,
-            debug_panel,
+            bphs_panel, weights_panel, critic_panel, debug_panel,
+            bphs_highlights,
         ]
 
         all_inputs = [
@@ -468,68 +436,14 @@ def build_demo() -> gr.Blocks:
             chatbot, session_state,
         ]
 
-        def _handle_and_update_reasoning(*args):
-            results = handle_query(*args)
-            # results[0] is chatbot (list of [user, bot] pairs)
-            # Extract reading from last bot message to build reasoning chain
-            chat = results[0]
-            # We can't recover the StructuredReading here from just text;
-            # reasoning display is handled inline in handle_query
-            return results
-
-        submit_btn.click(
-            fn=handle_query,
-            inputs=all_inputs,
-            outputs=all_outputs,
-            api_name="ask",
-        )
-
-        query_input.submit(
-            fn=handle_query,
-            inputs=all_inputs,
-            outputs=all_outputs,
-        )
-
-        clear_btn.click(
-            fn=handle_clear,
-            inputs=[session_state],
-            outputs=all_outputs,
-        )
-
-        # Debug mode toggle
-        def toggle_debug(enabled):
-            return gr.update(visible=enabled)
-
-        debug_mode.change(
-            fn=toggle_debug,
-            inputs=[debug_mode],
-            outputs=[debug_accordion],
-        )
-
-        # ── Examples ──────────────────────────────────────────────────────
-        gr.Examples(
-            examples=[
-                [1990, 6, 15, 14, 30, "Mumbai, India", "", "",
-                 "What does my chart say about career prospects this year?",
-                 "career", ""],
-                [1985, 3, 21, 8, 0, "New Delhi, India", "", "",
-                 "When is a good time for marriage based on my dasha?",
-                 "marriage", ""],
-                [1975, 11, 5, 22, 15, "London", "", "",
-                 "What yogas do I have and how will they manifest?",
-                 "general", ""],
-            ],
-            inputs=[year, month, day, hour, minute, place, lat_str, lon_str,
-                    query_input, domain_sel, query_date_str],
-            label="Example Queries",
-        )
+        # Wire events
+        ask_btn.click(fn=handle_query, inputs=all_inputs, outputs=all_outputs)
+        submit_btn.click(fn=handle_query, inputs=all_inputs, outputs=all_outputs, api_name="ask")
+        query_input.submit(fn=handle_query, inputs=all_inputs, outputs=all_outputs)
+        clear_btn.click(fn=handle_clear, inputs=[session_state], outputs=all_outputs)
 
     return demo
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Entry point
-# ─────────────────────────────────────────────────────────────────────────────
 
 def create_app() -> gr.Blocks:
     return build_demo()

@@ -1,9 +1,10 @@
 """
-llm_client.py — LLM wrapper supporting Anthropic and Ollama backends.
+llm_client.py — LLM wrapper supporting Anthropic, Ollama, and HF Inference backends.
 
 Backend selection is controlled by ``settings.llm_backend``:
-  - "anthropic"  → Anthropic Messages API (requires ANTHROPIC_API_KEY + credits)
-  - "ollama"     → Local Ollama server (free, uses settings.ollama_model)
+  - "anthropic"    → Anthropic Messages API (requires ANTHROPIC_API_KEY + credits)
+  - "ollama"       → Local Ollama server (free, uses settings.ollama_model)
+  - "hf_inference" → HuggingFace Inference API (free tier, uses HF_TOKEN)
 
 All responses are Redis-cached by prompt hash (7-day TTL).
 
@@ -13,7 +14,7 @@ Usage
     text = await client.complete(
         system="You are a Vedic astrology expert.",
         user="Interpret this chart: ...",
-        model="claude-sonnet-4-6",   # ignored when backend=ollama
+        model="claude-sonnet-4-6",   # ignored when backend != anthropic
         max_tokens=1500,
     )
 """
@@ -101,6 +102,37 @@ class LLMClient:
             logger.error("Ollama API error: %s", exc)
             raise RuntimeError(f"LLM call failed (ollama): {exc}") from exc
 
+    async def _complete_hf_inference(
+        self,
+        system: str,
+        user: str,
+        model: str,
+        max_tokens: int,
+        temperature: float,
+    ) -> str:
+        import os
+        import asyncio
+        from huggingface_hub import InferenceClient
+
+        hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
+        try:
+            client = InferenceClient(model=model, token=hf_token)
+            messages = [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ]
+            # InferenceClient is sync; run in thread to avoid blocking the event loop
+            response = await asyncio.to_thread(
+                client.chat_completion,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+            return response.choices[0].message.content
+        except Exception as exc:
+            logger.error("HF Inference API error: %s", exc)
+            raise RuntimeError(f"LLM call failed (hf_inference): {exc}") from exc
+
     async def complete(
         self,
         system: str,
@@ -113,15 +145,20 @@ class LLMClient:
         """
         Send a completion request and return the assistant text.
 
-        When ``settings.llm_backend == "ollama"``, the *model* parameter is
-        ignored and ``settings.ollama_model`` is used instead.
+        The *model* parameter is only used when backend == "anthropic".
+        For other backends the model is taken from settings.
         """
         from vedic_astro.tools.hasher import make_llm_key
         from vedic_astro.tools.cache import get_cache
         from vedic_astro.settings import settings
 
         backend = settings.llm_backend
-        effective_model = settings.ollama_model if backend == "ollama" else model
+        if backend == "ollama":
+            effective_model = settings.ollama_model
+        elif backend == "hf_inference":
+            effective_model = settings.hf_inference_model
+        else:
+            effective_model = model
 
         full_prompt = f"[backend={backend}][model={effective_model}][sys={system}][user={user}]"
         cache_key = make_llm_key(full_prompt)
@@ -135,6 +172,8 @@ class LLMClient:
 
         if backend == "ollama":
             text = await self._complete_ollama(system, user, effective_model, max_tokens, temperature)
+        elif backend == "hf_inference":
+            text = await self._complete_hf_inference(system, user, effective_model, max_tokens, temperature)
         else:
             text = await self._complete_anthropic(system, user, effective_model, max_tokens, temperature)
 
@@ -158,7 +197,7 @@ def get_llm_client() -> LLMClient:
         from vedic_astro.settings import settings
         if settings.llm_backend == "anthropic" and not settings.anthropic_api_key:
             raise RuntimeError(
-                "ANTHROPIC_API_KEY not set. Add it to .env or set LLM_BACKEND=ollama."
+                "ANTHROPIC_API_KEY not set. Add it to .env or set LLM_BACKEND=hf_inference."
             )
         _llm_instance = LLMClient(api_key=settings.anthropic_api_key)
     return _llm_instance
