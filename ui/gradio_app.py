@@ -687,7 +687,6 @@ def build_demo() -> gr.Blocks:
                     query_input, domain_sel, query_date_str],
             label="Examples",
             examples_per_page=3,
-            elem_classes="examples",
         )
 
         # ── Wire events ───────────────────────────────────────────────────
