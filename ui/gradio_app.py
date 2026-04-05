@@ -1,5 +1,5 @@
 """
-gradio_app.py — Vedic Astrology AI · Gradio 5.x interface
+gradio_app.py — Vedic Astrology AI · Minimal Apple-inspired UI
 """
 
 from __future__ import annotations
@@ -15,160 +15,219 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 CSS = """
-/* ── Fonts & Base ─────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
-body, .gradio-container { font-family: 'Inter', sans-serif !important; }
+/* ── Reset & Base ─────────────────────────────────────── */
+* { box-sizing: border-box; }
+body, .gradio-container {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif !important;
+    background: #f5f5f7 !important;
+    color: #1d1d1f !important;
+}
+.gradio-container { max-width: 1400px !important; margin: 0 auto !important; padding: 0 1.5rem !important; }
 
 /* ── Header ───────────────────────────────────────────── */
-.app-header {
-    background: linear-gradient(135deg, #78350f 0%, #b45309 50%, #d97706 100%);
-    border-radius: 12px;
-    padding: 1.8rem 2rem 1.4rem;
-    margin-bottom: 1rem;
+.hdr {
     text-align: center;
-    box-shadow: 0 4px 20px rgba(180, 83, 9, 0.25);
+    padding: 3.5rem 1rem 2.5rem;
 }
-.app-header h1 {
-    font-size: 2.2rem;
+.hdr h1 {
+    font-size: 3rem;
     font-weight: 700;
-    color: #fff;
-    margin: 0 0 0.4rem;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.04em;
+    color: #1d1d1f;
+    margin: 0 0 0.5rem;
+    line-height: 1.1;
 }
-.app-header .subtitle {
-    color: rgba(255,255,255,0.85);
-    font-size: 0.95rem;
+.hdr p {
+    font-size: 1.1rem;
+    color: #6e6e73;
     margin: 0;
+    font-weight: 400;
+    letter-spacing: -0.01em;
 }
-.app-header .badges {
-    display: flex;
-    justify-content: center;
-    gap: 0.6rem;
-    margin-top: 0.8rem;
-    flex-wrap: wrap;
+
+/* ── Cards ────────────────────────────────────────────── */
+.card {
+    background: #ffffff;
+    border-radius: 18px;
+    padding: 1.5rem;
+    border: none;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
 }
-.badge {
-    background: rgba(255,255,255,0.2);
-    color: #fff;
-    padding: 0.2rem 0.7rem;
-    border-radius: 20px;
-    font-size: 0.75rem;
+
+/* ── Form labels ──────────────────────────────────────── */
+.field-group-label {
+    font-size: 0.68rem;
     font-weight: 600;
-    backdrop-filter: blur(4px);
-}
-
-/* ── Form Card ─────────────────────────────────────────── */
-.form-card {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    padding: 1.2rem;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.06);
-}
-.form-section-title {
-    font-size: 0.7rem;
-    font-weight: 700;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #9ca3af;
-    margin: 1rem 0 0.4rem;
+    color: #aeaeb2;
+    margin: 1.2rem 0 0.5rem;
+    display: block;
 }
+.field-group-label:first-child { margin-top: 0; }
 
-/* ── Chat Panel ────────────────────────────────────────── */
-.chat-wrap {
-    border-radius: 12px;
-    overflow: hidden;
-    border: 1px solid #e5e7eb;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.06);
-}
-
-/* ── Query Box ─────────────────────────────────────────── */
-.query-area textarea {
+/* ── Inputs ───────────────────────────────────────────── */
+input[type=number], input[type=text], textarea, select,
+.gr-textbox textarea, .gr-number input, .gr-dropdown select {
+    background: #f5f5f7 !important;
+    border: 1.5px solid transparent !important;
     border-radius: 10px !important;
-    border: 2px solid #e5e7eb !important;
-    font-size: 0.95rem !important;
-    transition: border-color 0.2s;
+    font-size: 0.9rem !important;
+    color: #1d1d1f !important;
+    transition: border-color 0.15s, background 0.15s !important;
+    font-family: inherit !important;
 }
-.query-area textarea:focus {
-    border-color: #d97706 !important;
-    box-shadow: 0 0 0 3px rgba(217,119,6,0.1) !important;
+input:focus, textarea:focus, select:focus,
+.gr-textbox textarea:focus, .gr-number input:focus {
+    background: #fff !important;
+    border-color: #0071e3 !important;
+    box-shadow: 0 0 0 3px rgba(0,113,227,0.12) !important;
+    outline: none !important;
 }
 
-/* ── Buttons ───────────────────────────────────────────── */
-.btn-ask {
-    background: linear-gradient(135deg, #b45309, #d97706) !important;
-    border: none !important;
-    border-radius: 10px !important;
+/* ── Primary button ───────────────────────────────────── */
+.btn-primary {
+    background: #0071e3 !important;
     color: #fff !important;
+    border: none !important;
+    border-radius: 980px !important;
     font-weight: 600 !important;
-    font-size: 1rem !important;
-    padding: 0.75rem 1.5rem !important;
-    transition: opacity 0.2s, transform 0.1s !important;
-    box-shadow: 0 2px 8px rgba(180,83,9,0.3) !important;
+    font-size: 0.92rem !important;
+    padding: 0.6rem 1.4rem !important;
+    letter-spacing: -0.01em !important;
+    transition: background 0.15s, transform 0.1s !important;
+    box-shadow: none !important;
+    font-family: inherit !important;
 }
-.btn-ask:hover { opacity: 0.9 !important; transform: translateY(-1px) !important; }
-.btn-clear {
-    border-radius: 8px !important;
+.btn-primary:hover { background: #0077ed !important; transform: none !important; }
+.btn-primary:active { background: #006edb !important; transform: scale(0.98) !important; }
+
+/* ── Secondary button ─────────────────────────────────── */
+.btn-secondary {
+    background: #e8e8ed !important;
+    color: #1d1d1f !important;
+    border: none !important;
+    border-radius: 980px !important;
+    font-weight: 500 !important;
     font-size: 0.85rem !important;
+    padding: 0.5rem 1.1rem !important;
+    font-family: inherit !important;
+}
+.btn-secondary:hover { background: #d2d2d7 !important; }
+
+/* ── Chat ─────────────────────────────────────────────── */
+.chatbot-wrap { border-radius: 18px !important; overflow: hidden; }
+.chatbot-wrap .message-wrap { padding: 1rem !important; }
+.chatbot-wrap .user { background: #0071e3 !important; color: #fff !important; border-radius: 18px 18px 4px 18px !important; }
+.chatbot-wrap .bot  { background: #f5f5f7 !important; color: #1d1d1f !important; border-radius: 18px 18px 18px 4px !important; }
+
+/* ── Query box ────────────────────────────────────────── */
+.query-wrap textarea {
+    background: #f5f5f7 !important;
+    border: 1.5px solid transparent !important;
+    border-radius: 14px !important;
+    font-size: 0.95rem !important;
+    resize: none !important;
+    line-height: 1.5 !important;
+    padding: 0.75rem 1rem !important;
+}
+.query-wrap textarea:focus {
+    background: #fff !important;
+    border-color: #0071e3 !important;
+    box-shadow: 0 0 0 3px rgba(0,113,227,0.12) !important;
 }
 
-/* ── Analysis Tabs ─────────────────────────────────────── */
-.tab-nav button {
-    font-size: 0.82rem !important;
-    padding: 0.4rem 0.7rem !important;
+/* ── Status line ──────────────────────────────────────── */
+.status-line {
+    font-size: 0.8rem;
+    color: #aeaeb2;
+    text-align: center;
+    padding: 0.3rem 0;
+    letter-spacing: -0.01em;
+}
+.status-line strong { color: #1d1d1f; }
+
+/* ── Tabs ─────────────────────────────────────────────── */
+.tabs-wrap .tab-nav {
+    border-bottom: 1px solid #e5e5ea !important;
+    margin-bottom: 1rem !important;
+    gap: 0 !important;
+}
+.tabs-wrap .tab-nav button {
+    font-size: 0.8rem !important;
+    font-weight: 500 !important;
+    color: #6e6e73 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0.5rem 0.9rem !important;
+    background: transparent !important;
+    border-bottom: 2px solid transparent !important;
+    transition: color 0.15s, border-color 0.15s !important;
+    font-family: inherit !important;
+}
+.tabs-wrap .tab-nav button.selected, .tabs-wrap .tab-nav button:focus {
+    color: #0071e3 !important;
+    border-bottom-color: #0071e3 !important;
+    background: transparent !important;
 }
 
-/* ── BPHS rule callout ─────────────────────────────────── */
-.bphs-callout {
-    background: linear-gradient(135deg, #fffbeb, #fef3c7);
-    border: 1px solid #fcd34d;
-    border-left: 4px solid #d97706;
-    border-radius: 0 8px 8px 0;
-    padding: 0.6rem 0.9rem;
-    margin: 0.35rem 0;
+/* ── Panel text ───────────────────────────────────────── */
+.panel-md { font-size: 0.88rem !important; line-height: 1.7 !important; color: #1d1d1f !important; }
+.panel-md h2, .panel-md h3 { font-size: 0.9rem !important; font-weight: 600 !important; margin: 1rem 0 0.3rem !important; }
+.panel-md p { margin: 0.4rem 0 !important; }
+.panel-md blockquote {
+    border-left: 3px solid #e5e5ea;
+    margin: 0.5rem 0;
+    padding: 0.3rem 0.8rem;
+    color: #6e6e73;
     font-size: 0.84rem;
+}
+
+/* ── BPHS rule pills ──────────────────────────────────── */
+.rule-item {
+    display: block;
+    background: #f5f5f7;
+    border-radius: 10px;
+    padding: 0.55rem 0.85rem;
+    margin: 0.3rem 0;
+    font-size: 0.82rem;
+    color: #3a3a3c;
     line-height: 1.5;
 }
-
-/* ── Score table ───────────────────────────────────────── */
-.score-table table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-.score-table th { background: #f9fafb; color: #374151; font-weight: 600; text-align: left; padding: 0.5rem 0.75rem; border-bottom: 2px solid #e5e7eb; }
-.score-table td { padding: 0.45rem 0.75rem; border-bottom: 1px solid #f3f4f6; }
-
-/* ── Step guide ────────────────────────────────────────── */
-.step-guide {
-    background: #f9fafb;
-    border-radius: 10px;
-    padding: 1rem;
-    font-size: 0.85rem;
-    color: #374151;
-    line-height: 1.7;
-}
-.step-num {
-    display: inline-block;
-    background: #d97706;
-    color: #fff;
-    border-radius: 50%;
-    width: 1.3rem;
-    height: 1.3rem;
-    text-align: center;
-    font-size: 0.72rem;
-    font-weight: 700;
-    line-height: 1.3rem;
-    margin-right: 0.4rem;
+.rule-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #aeaeb2;
+    display: block;
+    margin-bottom: 0.15rem;
 }
 
-/* ── Loading indicator ─────────────────────────────────── */
-.status-pending { color: #d97706; font-weight: 600; font-size: 0.88rem; }
-.status-ok      { color: #16a34a; font-weight: 600; font-size: 0.88rem; }
-.status-err     { color: #dc2626; font-weight: 600; font-size: 0.88rem; }
+/* ── Examples ─────────────────────────────────────────── */
+.examples-wrap .label { font-size: 0.8rem !important; color: #6e6e73 !important; font-weight: 500 !important; }
+.examples-wrap table td { font-size: 0.82rem !important; padding: 0.4rem 0.6rem !important; }
 
-footer { display: none !important; }
+/* ── Section heading ──────────────────────────────────── */
+.section-heading {
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #aeaeb2;
+    margin: 0 0 0.75rem;
+}
+
+/* ── Score table ──────────────────────────────────────── */
+.score-table table { font-size: 0.85rem !important; }
+.score-table th { color: #6e6e73 !important; font-weight: 600 !important; font-size: 0.78rem !important; text-transform: uppercase !important; letter-spacing: 0.04em !important; }
+
+/* ── Hide gradio chrome ───────────────────────────────── */
+footer, .built-with { display: none !important; }
+.gr-prose h2 { font-size: 1rem !important; }
+.hide-label > label > span { display: none !important; }
 """
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Async bridge
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _run_async(coro):
@@ -183,10 +242,6 @@ def _run_async(coro):
         return asyncio.run(coro)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Lazy solver singleton
-# ─────────────────────────────────────────────────────────────────────────────
-
 _solver = None
 
 def get_solver():
@@ -197,19 +252,15 @@ def get_solver():
     return _solver
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Domain auto-detection
-# ─────────────────────────────────────────────────────────────────────────────
-
 _DOMAIN_KW = {
-    "career":       ["career", "job", "work", "profession", "business", "promotion", "office"],
+    "career":       ["career", "job", "work", "profession", "business", "promotion"],
     "marriage":     ["marriage", "spouse", "partner", "relationship", "wedding", "love", "husband", "wife"],
-    "wealth":       ["wealth", "money", "finance", "rich", "income", "property", "savings"],
-    "health":       ["health", "disease", "illness", "surgery", "longevity", "body", "sick"],
-    "spirituality": ["spiritual", "meditation", "dharma", "moksha", "karma", "soul"],
+    "wealth":       ["wealth", "money", "finance", "rich", "income", "property"],
+    "health":       ["health", "disease", "illness", "surgery", "longevity", "body"],
+    "spirituality": ["spiritual", "meditation", "dharma", "moksha", "karma"],
     "children":     ["child", "children", "baby", "son", "daughter", "pregnancy"],
-    "travel":       ["travel", "foreign", "abroad", "move", "relocate", "journey"],
-    "family":       ["family", "mother", "father", "sibling", "home", "house"],
+    "travel":       ["travel", "foreign", "abroad", "relocate", "journey"],
+    "family":       ["family", "mother", "father", "sibling", "home"],
 }
 
 def auto_domain(query: str, explicit: str) -> str:
@@ -222,11 +273,8 @@ def auto_domain(query: str, explicit: str) -> str:
     return "general"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Core query handler
-# ─────────────────────────────────────────────────────────────────────────────
-
 _EMPTY_DF = pd.DataFrame(columns=["Layer", "Weight %", "Score", "Rating"])
+
 
 def handle_query(
     year, month, day, hour, minute, place, lat_str, lon_str,
@@ -234,9 +282,9 @@ def handle_query(
     chat_history, session_state,
 ):
     if not str(query).strip():
-        return (chat_history, session_state, "", "", "", "", "", _EMPTY_DF.copy(), "", {}, "*Ask a question to see rules.*", "")
+        return (chat_history, session_state, "", "", "", "", "", _EMPTY_DF.copy(), "", {}, "", "")
 
-    from vedic_astro.agents.pipeline import BirthData, ReadingRequest
+    from vedic_astro.agents.pipeline import BirthData
 
     lat = float(lat_str) if str(lat_str).strip() else None
     lon = float(lon_str) if str(lon_str).strip() else None
@@ -260,32 +308,32 @@ def handle_query(
         reading = result.reading
     except Exception as exc:
         logger.exception("Pipeline error")
-        error_md = f"**Error:** {exc}"
-        new_history = chat_history + [[str(query), error_md]]
-        return (new_history, session_state, "", "", "", "", "", _EMPTY_DF.copy(), error_md, {}, "*—*", f"❌ Error: {exc}")
+        err = f"Something went wrong — {exc}"
+        return (
+            chat_history + [[str(query), err]],
+            session_state, "", "", "", "", "", _EMPTY_DF.copy(), "", {}, "", err,
+        )
 
     _run_async(_save_session(session_state, birth, reading))
 
     response_md = reading.to_markdown() if hasattr(reading, "to_markdown") else str(reading.final_reading)
     new_history = chat_history + [[str(query), response_md]]
 
-    chart_md   = _render_chart(reading)
-    dasha_md   = _render_dasha(reading)
-    transit_md = _render_transit(reading)
-    yoga_md    = _render_yogas(reading)
-    bphs_md    = _render_bphs_rules(reading)
-    weights_df = _render_weights(reading)
-    critic_md  = _render_critic(reading)
-    debug_json = reading.to_debug_dict() if hasattr(reading, "to_debug_dict") else {}
-    bphs_list  = _bphs_rule_list(reading)
-    score_val  = reading.score.final_score if reading.score else 0
-    status_md  = f"✅ Reading complete · Domain: **{domain}** · Score: **{score_val:.2f}**"
+    score_val = reading.score.final_score if reading.score else 0
+    status = f"Domain · **{domain}** &nbsp;·&nbsp; Score · **{score_val:.2f}** &nbsp;·&nbsp; {reading.score.interpretation.replace('_',' ').title() if reading.score else ''}"
 
     return (
         new_history, session_state,
-        chart_md, dasha_md, transit_md, yoga_md,
-        bphs_md, weights_df, critic_md, debug_json,
-        bphs_list, status_md,
+        _render_chart(reading),
+        _render_dasha(reading),
+        _render_transit(reading),
+        _render_yogas(reading),
+        _render_bphs_rules(reading),
+        _render_weights(reading),
+        _render_critic(reading),
+        reading.to_debug_dict() if hasattr(reading, "to_debug_dict") else {},
+        _bphs_rule_html(reading),
+        status,
     )
 
 
@@ -310,111 +358,93 @@ async def _save_session(session_state, birth, reading):
         pass
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Panel renderers
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Renderers ────────────────────────────────────────────────────────────────
 
-def _render_chart(reading) -> str:
-    if not reading.natal_narrative:
-        return "*No natal data computed.*"
-    score_line = ""
-    if hasattr(reading, "score") and reading.score:
-        score_line = f"\n\n---\n**Composite Score:** `{reading.score.final_score:.2f}` — *{reading.score.interpretation.replace('_',' ').title()}*"
-    return f"{reading.natal_narrative}{score_line}"
+def _render_chart(r) -> str:
+    if not r.natal_narrative:
+        return "*—*"
+    tail = f"\n\n**Score** `{r.score.final_score:.2f}` · {r.score.interpretation.replace('_',' ').title()}" if r.score else ""
+    return r.natal_narrative + tail
 
 
-def _render_dasha(reading) -> str:
-    if not reading.dasha_narrative:
-        return "*No dasha data.*"
-    score_line = ""
-    if hasattr(reading, "score") and reading.score:
-        score_line = f"\n\n---\n**Dasha Activation Score:** `{reading.score.dasha_activation:.2f}`"
-    return f"{reading.dasha_narrative}{score_line}"
+def _render_dasha(r) -> str:
+    if not r.dasha_narrative:
+        return "*—*"
+    tail = f"\n\n**Dasha activation** `{r.score.dasha_activation:.2f}`" if r.score else ""
+    return r.dasha_narrative + tail
 
 
-def _render_transit(reading) -> str:
-    if not reading.transit_narrative:
-        return "*No transit data.*"
-    score_line = ""
-    if hasattr(reading, "score") and reading.score:
-        score_line = f"\n\n---\n**Transit Trigger Score:** `{reading.score.transit_trigger:.2f}`"
-    return f"{reading.transit_narrative}{score_line}"
+def _render_transit(r) -> str:
+    if not r.transit_narrative:
+        return "*—*"
+    tail = f"\n\n**Transit trigger** `{r.score.transit_trigger:.2f}`" if r.score else ""
+    return r.transit_narrative + tail
 
 
-def _render_yogas(reading) -> str:
-    if not reading.yoga_narrative:
-        return "*No yoga/dosha data.*"
-    return reading.yoga_narrative
+def _render_yogas(r) -> str:
+    return r.yoga_narrative if r.yoga_narrative else "*—*"
 
 
-def _render_bphs_rules(reading) -> str:
-    rules = getattr(reading, "retrieved_rules", {})
+def _render_bphs_rules(r) -> str:
+    rules = getattr(r, "retrieved_rules", {})
     if not rules:
-        return "*No classical rules retrieved.*"
+        return "*—*"
     lines = []
     for agent, rule_list in rules.items():
         if rule_list:
-            lines.append(f"### {agent.title()}")
-            for r in rule_list[:4]:
-                lines.append(f"> {r}\n")
-    return "\n".join(lines) if lines else "*No rules applied.*"
+            lines.append(f"**{agent.title()}**")
+            for rule in rule_list[:4]:
+                lines.append(f"> {rule}\n")
+    return "\n".join(lines) or "*—*"
 
 
-def _bphs_rule_list(reading) -> str:
-    rules = getattr(reading, "retrieved_rules", {})
-    flat = []
-    for agent, rule_list in rules.items():
-        for r in rule_list[:2]:
-            flat.append(f"**{agent.title()}:** {r}")
+def _bphs_rule_html(r) -> str:
+    rules = getattr(r, "retrieved_rules", {})
+    flat = [(agent, rule) for agent, rl in rules.items() for rule in rl[:2]]
     if not flat:
-        return "*No rules applied.*"
-    return "\n\n".join(f'<div class="bphs-callout">{r}</div>' for r in flat[:10])
+        return '<p style="color:#aeaeb2;font-size:0.82rem">No rules retrieved.</p>'
+    html = ""
+    for agent, rule in flat[:8]:
+        html += (
+            f'<span class="rule-item">'
+            f'<span class="rule-label">{agent.title()}</span>'
+            f'{rule}'
+            f'</span>'
+        )
+    return html
 
 
-def _render_weights(reading) -> pd.DataFrame:
-    rows = []
-    for step in reading.reasoning_chain:
-        rows.append({
-            "Layer": step.label,
-            "Weight %": step.weight_pct,
-            "Score": f"{step.component_score:.2f}",
-            "Rating": step.score_label,
-        })
+def _render_weights(r) -> pd.DataFrame:
+    rows = [
+        {"Layer": s.label, "Weight %": s.weight_pct, "Score": f"{s.component_score:.2f}", "Rating": s.score_label}
+        for s in r.reasoning_chain
+    ]
     if not rows:
         return _EMPTY_DF.copy()
     df = pd.DataFrame(rows)
     df.loc[len(df)] = {
-        "Layer": "COMPOSITE",
-        "Weight %": 100,
-        "Score": f"{reading.score.final_score:.2f}",
-        "Rating": reading.score.interpretation.replace("_", " ").title(),
+        "Layer": "COMPOSITE", "Weight %": 100,
+        "Score": f"{r.score.final_score:.2f}",
+        "Rating": r.score.interpretation.replace("_", " ").title(),
     }
     return df
 
 
-def _render_critic(reading) -> str:
-    score = reading.score.final_score if reading.score else 0
-    if not reading.critic_notes:
-        if score >= 0.65:
-            return f"✅ **Passed** — high-confidence reading (score: {score:.2f})"
-        return "✅ Passed — no issues found."
-    lines = [
-        f"**Score:** `{score:.2f}`  ·  **Revised:** {'Yes ✓' if reading.was_revised else 'No'}",
-        "",
-        "**Issues flagged:**",
-    ]
-    for note in reading.critic_notes:
+def _render_critic(r) -> str:
+    score = r.score.final_score if r.score else 0
+    if not r.critic_notes:
+        return f"Passed · {score:.2f}" + (" — high confidence" if score >= 0.65 else "")
+    lines = [f"Score `{score:.2f}` · Revised: {'yes' if r.was_revised else 'no'}", ""]
+    for note in r.critic_notes:
         lines.append(f"- {note}")
     return "\n".join(lines)
 
 
 def handle_clear(session_state):
-    return ([], session_state, "", "", "", "", "", _EMPTY_DF.copy(), "", {}, "*Ask a question to see rules.*", "")
+    return ([], session_state, "", "", "", "", "", _EMPTY_DF.copy(), "", {}, "", "")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# UI definition
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Build UI ─────────────────────────────────────────────────────────────────
 
 def build_demo() -> gr.Blocks:
 
@@ -422,174 +452,154 @@ def build_demo() -> gr.Blocks:
 
         session_state = gr.State({})
 
-        # ── Header ────────────────────────────────────────────────────────
+        # Header
         gr.HTML("""
-        <div class="app-header">
-          <h1>🔯 Vedic Astrology AI</h1>
-          <p class="subtitle">Classical Parashari readings powered by Swiss Ephemeris · BPHS rules · Multi-agent AI</p>
-          <div class="badges">
-            <span class="badge">🪐 Swiss Ephemeris</span>
-            <span class="badge">📜 BPHS Rules</span>
-            <span class="badge">🤖 5-Agent Pipeline</span>
-            <span class="badge">⚖️ Lahiri Ayanamsha</span>
-          </div>
+        <div class="hdr">
+          <h1>Vedic Astrology AI</h1>
+          <p>Classical Parashari readings · Swiss Ephemeris · BPHS rules · Multi-agent synthesis</p>
         </div>
         """)
 
         with gr.Row(equal_height=False):
 
-            # ── Column 1: Birth Form ──────────────────────────────────────
-            with gr.Column(scale=1, min_width=240):
+            # ── Left: Birth Form ──────────────────────────────────────────
+            with gr.Column(scale=1, min_width=220, elem_classes="card"):
 
-                with gr.Group(elem_classes="form-card"):
-                    gr.Markdown("### 📅 Birth Details")
+                gr.HTML('<span class="field-group-label">Date of birth</span>')
+                with gr.Row():
+                    day   = gr.Number(label="Day",   value=15,   precision=0, minimum=1,   maximum=31,   scale=1, elem_classes="hide-label")
+                    month = gr.Number(label="Month", value=6,    precision=0, minimum=1,   maximum=12,   scale=1, elem_classes="hide-label")
+                    year  = gr.Number(label="Year",  value=1990, precision=0, minimum=1800, maximum=2100, scale=2, elem_classes="hide-label")
 
-                    gr.HTML('<p class="form-section-title">Date of Birth</p>')
-                    with gr.Row():
-                        day   = gr.Number(label="Day",   value=15,   precision=0, minimum=1,  maximum=31,   scale=1)
-                        month = gr.Number(label="Month", value=6,    precision=0, minimum=1,  maximum=12,   scale=1)
-                        year  = gr.Number(label="Year",  value=1990, precision=0, minimum=1800, maximum=2100, scale=2)
+                gr.HTML('<span class="field-group-label">Time of birth</span>')
+                with gr.Row():
+                    hour   = gr.Number(label="Hour",   value=14, precision=0, minimum=0, maximum=23, scale=1, elem_classes="hide-label")
+                    minute = gr.Number(label="Minute", value=30, precision=0, minimum=0, maximum=59, scale=1, elem_classes="hide-label")
 
-                    gr.HTML('<p class="form-section-title">Time of Birth</p>')
-                    with gr.Row():
-                        hour   = gr.Number(label="Hour (0–23)", value=14, precision=0, minimum=0, maximum=23, scale=1)
-                        minute = gr.Number(label="Minute",      value=30, precision=0, minimum=0, maximum=59, scale=1)
+                gr.HTML('<span class="field-group-label">Place of birth</span>')
+                place = gr.Textbox(label="Place", placeholder="Mumbai, India", lines=1, show_label=False)
 
-                    gr.HTML('<p class="form-section-title">Place of Birth</p>')
-                    place = gr.Textbox(label="City, Country", placeholder="Mumbai, India", lines=1)
-                    with gr.Row():
-                        lat_str = gr.Textbox(label="Latitude (optional)",  placeholder="19.076", scale=1)
-                        lon_str = gr.Textbox(label="Longitude (optional)", placeholder="72.877", scale=1)
+                with gr.Row():
+                    lat_str = gr.Textbox(label="Lat", placeholder="19.076", scale=1, show_label=False)
+                    lon_str = gr.Textbox(label="Lon", placeholder="72.877", scale=1, show_label=False)
 
-                    gr.HTML('<p class="form-section-title">Query Settings</p>')
-                    domain_sel = gr.Dropdown(
-                        choices=["auto","general","career","marriage","wealth",
-                                 "health","spirituality","children","travel","family","social_standing"],
-                        value="auto",
-                        label="Life Domain (auto-detects from question)",
-                        info="Leave as 'auto' for automatic detection",
-                    )
-                    query_date_str = gr.Textbox(
-                        label="Transit Reference Date",
-                        placeholder="Leave blank for today",
-                        info="Format: YYYY-MM-DD",
-                    )
+                gr.HTML('<span class="field-group-label" style="margin-top:1rem">Domain</span>')
+                domain_sel = gr.Dropdown(
+                    choices=["auto","general","career","marriage","wealth",
+                             "health","spirituality","children","travel","family","social_standing"],
+                    value="auto", show_label=False,
+                )
 
-                clear_btn = gr.Button("🗑 Clear Conversation", size="sm", elem_classes="btn-clear")
+                gr.HTML('<span class="field-group-label">Transit date</span>')
+                query_date_str = gr.Textbox(
+                    label="Date", placeholder="Leave blank for today",
+                    show_label=False,
+                )
 
-                gr.HTML("""
-                <div class="step-guide" style="margin-top:1rem">
-                  <strong>How to use:</strong><br>
-                  <span class="step-num">1</span> Enter birth date, time &amp; place<br>
-                  <span class="step-num">2</span> Type your question below<br>
-                  <span class="step-num">3</span> Click <strong>Get Reading</strong><br>
-                  <span class="step-num">4</span> Explore analysis tabs →
-                </div>
-                """)
+                gr.HTML('<div style="height:0.5rem"></div>')
+                clear_btn = gr.Button("Clear", elem_classes="btn-secondary", size="sm")
 
-            # ── Column 2: Chat ────────────────────────────────────────────
+            # ── Centre: Chat ──────────────────────────────────────────────
             with gr.Column(scale=3):
-
-                status_bar = gr.Markdown("", elem_id="status-bar")
 
                 chatbot = gr.Chatbot(
                     label="",
-                    height=460,
+                    height=480,
                     type="tuples",
                     show_copy_button=True,
+                    show_label=False,
+                    elem_classes="chatbot-wrap",
                     placeholder=(
-                        "### Welcome to Vedic Astrology AI\n\n"
-                        "Fill in your birth details on the left and ask any question about your life — "
-                        "career, relationships, health, wealth, timing of events, or spiritual path.\n\n"
-                        "*Try an example below to get started.*"
+                        "**Ask anything about your chart**\n\n"
+                        "Enter your birth details, then type a question — "
+                        "career, relationships, health, timing, spiritual path…\n\n"
+                        "Or try one of the examples below."
                     ),
-                    elem_classes="chat-wrap",
                 )
 
-                with gr.Row():
+                with gr.Row(equal_height=True):
                     query_input = gr.Textbox(
-                        label="",
-                        placeholder="Ask about career, marriage, health, wealth, travel, spirituality…",
-                        lines=2,
-                        scale=5,
-                        show_label=False,
-                        elem_classes="query-area",
+                        label="", placeholder="What does my chart say about…",
+                        lines=2, scale=5, show_label=False,
+                        elem_classes="query-wrap",
                     )
-                    ask_btn = gr.Button("✨ Get\nReading", variant="primary", scale=1, min_width=90, elem_classes="btn-ask")
+                    ask_btn = gr.Button("Ask", variant="primary", scale=1,
+                                        min_width=70, elem_classes="btn-primary")
 
-                gr.Markdown("#### 📜 Classical Rules Applied")
+                status_bar = gr.Markdown("", elem_classes="status-line")
+
+                # BPHS rules
+                gr.HTML('<p class="section-heading" style="margin-top:1.2rem">Classical rules applied</p>')
                 bphs_highlights = gr.HTML(
-                    value='<p style="color:#9ca3af;font-size:0.85rem;font-style:italic">BPHS rules injected into each agent will appear here after a reading.</p>',
-                    elem_id="bphs-list",
+                    '<p style="color:#aeaeb2;font-size:0.82rem">Rules will appear after your first reading.</p>'
                 )
 
-            # ── Column 3: Analysis Panels ─────────────────────────────────
-            with gr.Column(scale=2):
+            # ── Right: Analysis ───────────────────────────────────────────
+            with gr.Column(scale=2, elem_classes="card"):
 
-                gr.Markdown("### 📊 Analysis")
+                gr.HTML('<p class="section-heading">Analysis</p>')
 
-                with gr.Tabs(elem_classes="tab-nav"):
+                with gr.Tabs(elem_classes="tabs-wrap"):
 
-                    with gr.TabItem("🪐 Natal"):
-                        chart_panel = gr.Markdown("*Run a reading to see natal analysis.*")
+                    with gr.TabItem("Natal"):
+                        chart_panel = gr.Markdown("*—*", elem_classes="panel-md")
 
-                    with gr.TabItem("⏳ Dasha"):
-                        dasha_panel = gr.Markdown("*Run a reading to see dasha timing.*")
+                    with gr.TabItem("Dasha"):
+                        dasha_panel = gr.Markdown("*—*", elem_classes="panel-md")
 
-                    with gr.TabItem("🌍 Transit"):
-                        transit_panel = gr.Markdown("*Run a reading to see transit overlay.*")
+                    with gr.TabItem("Transits"):
+                        transit_panel = gr.Markdown("*—*", elem_classes="panel-md")
 
-                    with gr.TabItem("✨ Yogas"):
-                        yoga_panel = gr.Markdown("*Run a reading to see yoga/dosha analysis.*")
+                    with gr.TabItem("Yogas"):
+                        yoga_panel = gr.Markdown("*—*", elem_classes="panel-md")
 
-                    with gr.TabItem("📖 BPHS"):
-                        bphs_panel = gr.Markdown("*Classical rules per agent will appear here.*")
+                    with gr.TabItem("BPHS"):
+                        bphs_panel = gr.Markdown("*—*", elem_classes="panel-md")
 
-                    with gr.TabItem("⚖️ Score"):
+                    with gr.TabItem("Score"):
                         weights_panel = gr.DataFrame(
                             value=_EMPTY_DF.copy(),
                             interactive=False,
                             elem_classes="score-table",
                         )
 
-                    with gr.TabItem("🔍 Critic"):
-                        critic_panel = gr.Markdown("*Critic review will appear here.*")
+                    with gr.TabItem("Critic"):
+                        critic_panel = gr.Markdown("*—*", elem_classes="panel-md")
 
-                    with gr.TabItem("🐛 Debug"):
+                    with gr.TabItem("Debug"):
                         debug_panel = gr.JSON(label="")
 
-        # ── Examples ──────────────────────────────────────────────────────
-        with gr.Row():
-            gr.Examples(
-                examples=[
-                    [15, 6,  1990, 14, 30, "Mumbai, India",   "", "", "What does my chart say about career prospects this year?",         "career",   ""],
-                    [21, 3,  1985,  8,  0, "New Delhi, India", "", "", "When is a good time for marriage based on my dasha?",              "marriage", ""],
-                    [4,  8,  1994,  1, 50, "Delhi, India",    "", "", "What is my current dasha period and what does it mean?",            "general",  ""],
-                    [5,  11, 1975, 22, 15, "London, UK",      "", "", "What yogas do I have and how strong are they?",                    "general",  ""],
-                    [12, 1,  1988, 10, 20, "Chennai, India",  "", "", "How is my health and what precautions should I take?",             "health",   ""],
-                    [7,  4,  1995, 18, 45, "Singapore",       "", "", "Will I settle abroad? What does my chart say about foreign travel?","travel",   ""],
-                ],
-                inputs=[day, month, year, hour, minute, place, lat_str, lon_str,
-                        query_input, domain_sel, query_date_str],
-                label="📋 Try an Example",
-                examples_per_page=3,
-            )
+        # Examples
+        gr.HTML('<div style="height:1.5rem"></div>')
+        gr.Examples(
+            examples=[
+                [15, 6,  1990, 14, 30, "Mumbai, India",    "", "", "What does my chart say about career this year?",              "career",   ""],
+                [21, 3,  1985,  8,  0, "New Delhi, India", "", "", "When is a good time for marriage based on my dasha?",         "marriage", ""],
+                [4,  8,  1994,  1, 50, "Delhi, India",     "", "", "What is my current dasha period and what does it mean?",      "general",  ""],
+                [5,  11, 1975, 22, 15, "London, UK",       "", "", "What yogas do I have and how strong are they?",               "general",  ""],
+                [12, 1,  1988, 10, 20, "Chennai, India",   "", "", "What does my chart say about health and longevity?",          "health",   ""],
+                [7,  4,  1995, 18, 45, "Singapore",        "", "", "Will I settle abroad? What does my chart say about travel?",  "travel",   ""],
+            ],
+            inputs=[day, month, year, hour, minute, place, lat_str, lon_str,
+                    query_input, domain_sel, query_date_str],
+            label="Examples",
+            examples_per_page=3,
+            elem_classes="examples-wrap",
+        )
 
-        # ── Outputs list ──────────────────────────────────────────────────
+        # Wire
         all_outputs = [
             chatbot, session_state,
             chart_panel, dasha_panel, transit_panel, yoga_panel,
             bphs_panel, weights_panel, critic_panel, debug_panel,
             bphs_highlights, status_bar,
         ]
-
         all_inputs = [
             year, month, day, hour, minute, place, lat_str, lon_str,
             query_input, domain_sel, query_date_str,
             chatbot, session_state,
         ]
 
-        # Wire events
         ask_btn.click(fn=handle_query, inputs=all_inputs, outputs=all_outputs)
         query_input.submit(fn=handle_query, inputs=all_inputs, outputs=all_outputs, api_name="ask")
         clear_btn.click(fn=handle_clear, inputs=[session_state], outputs=all_outputs)
