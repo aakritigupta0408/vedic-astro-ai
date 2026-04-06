@@ -627,6 +627,83 @@ input[type=number]:focus, input[type=text]:focus, textarea:focus, select:focus {
     input[type=number] { min-height: 48px !important; font-size: 1rem !important; text-align: center !important; }
 }
 
+/* ── Phase 3 wrapper card (pure HTML div, not Gradio column) ─── */
+.p3-card {
+    background: #fff;
+    border-radius: 20px;
+    padding: 1.2rem 1rem 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 20px rgba(0,0,0,0.04);
+    margin-bottom: 0;
+}
+@media (min-width: 768px) {
+    .p3-card { padding: 1.5rem 1.4rem 1.2rem; }
+}
+
+/* Domain dropdown — compact inline */
+.domain-drop { max-width: 260px; }
+.domain-drop .wrap { min-height: 40px !important; }
+
+/* Input bar */
+.input-bar { margin-top: 0.75rem; }
+.input-row {
+    display: flex !important; align-items: flex-end !important;
+    gap: 0.5rem !important; flex-wrap: nowrap !important;
+}
+.input-row > div { margin: 0 !important; }
+
+/* Query textbox — single line, iOS messages style */
+.query-box textarea {
+    border-radius: 22px !important;
+    border: 1.5px solid #E5E5EA !important;
+    background: #F2F2F7 !important;
+    font-size: 0.95rem !important;
+    resize: none !important;
+    min-height: 46px !important;
+    max-height: 120px !important;
+    padding: 0.65rem 1rem !important;
+    line-height: 1.5 !important;
+    transition: border-color 0.18s, box-shadow 0.18s, background 0.18s !important;
+}
+.query-box textarea:focus {
+    background: #fff !important;
+    border-color: #007AFF !important;
+    box-shadow: 0 0 0 3px rgba(0,122,255,0.14) !important;
+}
+
+/* Circular send button */
+.send-btn {
+    width: 46px !important; height: 46px !important;
+    min-width: 46px !important; min-height: 46px !important;
+    border-radius: 50% !important;
+    padding: 0 !important; margin: 0 !important;
+    font-size: 1.3rem !important; line-height: 1 !important;
+    background: #007AFF !important; color: #fff !important;
+    border: none !important; flex-shrink: 0 !important;
+    display: flex !important; align-items: center !important;
+    justify-content: center !important;
+    box-shadow: 0 2px 10px rgba(0,122,255,0.30) !important;
+    transition: background 0.15s, transform 0.12s, box-shadow 0.15s !important;
+}
+.send-btn:hover { background: #0A84FF !important; box-shadow: 0 4px 14px rgba(0,122,255,0.38) !important; }
+.send-btn:active { transform: scale(0.93) !important; }
+
+/* Clear button — small, right‑aligned */
+.clear-btn {
+    margin-top: 0.5rem !important;
+    float: right !important;
+    min-height: 34px !important;
+    font-size: 0.8rem !important;
+    padding: 0 0.9rem !important;
+    background: #F2F2F7 !important;
+    color: #8E8E93 !important;
+    border: none !important;
+    border-radius: 980px !important;
+}
+.clear-btn:hover { background: #E5E5EA !important; color: #3A3A3C !important; }
+
+/* Rules placeholder */
+.rules-placeholder { color: #8E8E93; font-size: 0.82rem; margin: 0; font-style: italic; }
+
 /* ── Hide Gradio chrome ───────────────────────────────────────── */
 footer, .built-with, #footer, .svelte-1ipelgc { display: none !important; }
 .gr-prose p:last-child { margin-bottom: 0; }
@@ -1156,56 +1233,57 @@ def build_demo() -> gr.Blocks:
         gr.HTML('<div class="gap-md"></div>')
 
         # ══════════════════════════════════════════════════════════════════
-        # PHASE 3 — Ask
+        # PHASE 3 — Ask  (single‑column card, mobile‑first)
         # ══════════════════════════════════════════════════════════════════
-        with gr.Row(equal_height=False):
+        gr.HTML('<div class="p3-card">')   # ← open wrapper card
 
-            # Chat column (full width on mobile, 3/5 on desktop)
-            with gr.Column(scale=3, elem_classes="card"):
-                gr.HTML('<p class="sec-heading">💬 Phase 3 — Ask your question</p>')
+        gr.HTML('<p class="sec-heading" style="margin-bottom:0.6rem">💬 Ask your question</p>')
 
-                chatbot = gr.Chatbot(
-                    label="", height=420, type="messages",
-                    show_copy_button=True, show_label=False,
-                    elem_classes="chatbot",
-                    placeholder=(
-                        "Complete Phase 1 first, then ask anything about your chart.\n\n"
-                        "Try: *What does my chart say about career?* or "
-                        "*When is a good time for marriage?*"
-                    ),
-                )
+        domain_sel = gr.Dropdown(
+            choices=["auto", "general", "career", "marriage", "wealth",
+                     "health", "spirituality", "children", "travel", "family", "social_standing"],
+            value="auto", label="Domain",
+            info="'auto' detects from your question",
+            elem_classes="domain-drop",
+        )
 
-                gr.HTML('<div class="gap-sm"></div>')
+        gr.HTML('<div class="gap-sm"></div>')
 
-                with gr.Row(equal_height=True):
-                    query_input = gr.Textbox(
-                        label="", placeholder="Ask about career, marriage, wealth, health…",
-                        lines=2, scale=5, show_label=False, elem_classes="query-box",
-                    )
-                    ask_btn = gr.Button("↑", variant="primary", scale=1,
-                                       min_width=52, elem_classes="btn-primary ask-btn")
+        chatbot = gr.Chatbot(
+            label="", height=400, type="messages",
+            show_copy_button=True, show_label=False,
+            elem_classes="chatbot",
+            placeholder=(
+                "Complete Phase 1 (Compute Chart) first, then ask here.\n\n"
+                "e.g. *What does my chart say about career?*"
+            ),
+        )
 
-                p3_status = gr.Markdown("", elem_classes="status-line")
+        # Input bar — pinned inside the card
+        gr.HTML('<div class="input-bar">')
+        with gr.Row(equal_height=True, elem_classes="input-row"):
+            query_input = gr.Textbox(
+                label="", placeholder="Ask about career, marriage, wealth, health…",
+                lines=1, scale=5, show_label=False, elem_classes="query-box",
+            )
+            ask_btn = gr.Button("↑", variant="primary", scale=0,
+                                min_width=48, elem_classes="send-btn")
+        gr.HTML('</div>')
 
-                gr.HTML('<div class="gap-sm"></div>')
-                gr.HTML('<p class="sec-heading">📜 Classical rules applied</p>')
-                bphs_highlights = gr.HTML(
-                    '<p style="color:#8E8E93;font-size:0.82rem;margin:0">Rules appear after each reading.</p>'
-                )
-                gr.HTML('<div class="gap-sm"></div>')
-                clear_btn = gr.Button("Clear chat", elem_classes="btn-secondary", size="sm")
+        p3_status = gr.Markdown("", elem_classes="status-line")
+        clear_btn = gr.Button("Clear", elem_classes="btn-secondary clear-btn", size="sm")
 
-            # Options column (full width on mobile, 2/5 on desktop)
-            with gr.Column(scale=2, elem_classes="card"):
-                gr.HTML('<p class="sec-heading">🎯 Domain</p>')
-                domain_sel = gr.Dropdown(
-                    choices=["auto", "general", "career", "marriage", "wealth",
-                             "health", "spirituality", "children", "travel", "family", "social_standing"],
-                    value="auto", label="Life domain",
-                    info="'auto' detects from your question",
-                )
-                gr.HTML('<p class="sec-heading" style="margin-top:1.4rem">📚 BPHS rules (full list)</p>')
-                bphs_panel = gr.Markdown("*—*", elem_classes="panel-md")
+        gr.HTML('<div class="gap-sm"></div>')
+        gr.HTML('<p class="sec-heading">📜 Classical rules applied</p>')
+        bphs_highlights = gr.HTML(
+            '<p class="rules-placeholder">Rules appear after each reading.</p>'
+        )
+
+        gr.HTML('</div>')   # ← close wrapper card
+
+        # BPHS full list — collapsible below
+        with gr.Accordion("📚 Full BPHS rules", open=False):
+            bphs_panel = gr.Markdown("*—*", elem_classes="panel-md")
 
         gr.HTML('<div class="gap-md"></div>')
 
