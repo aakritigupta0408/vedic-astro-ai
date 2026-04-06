@@ -43,7 +43,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
 
 from vedic_astro.agents.output_formatter import OutputFormatter, StructuredReading
 from vedic_astro.settings import settings
@@ -89,6 +89,7 @@ class PipelineState:
     transit_overlay: Any = None            # TransitOverlay
     varga_charts: dict = field(default_factory=dict)
     yoga_bundle: Any = None                # YogaDoshaBundle
+    shadbala: Any = None                   # dict[str, ShadbalaScore]
     features: Any = None                   # AstroFeatures
     score: Any = None                      # ScoreBreakdown
 
@@ -162,33 +163,26 @@ class PipelineRunner:
         self._critic = CriticAgent()
         self._reviser = ReviserAgent()
 
-    # ── Main entry point ──────────────────────────────────────────────────
+    # ── Phase 1: compute chart (no LLM, no question needed) ──────────────
 
-    async def run(self, request: ReadingRequest) -> StructuredReading:
+    async def compute_chart(self, request: ReadingRequest) -> "PipelineState":
         """
-        Run the full pipeline and return a ``StructuredReading``.
+        Phase 1 — Run all deterministic engine stages and return the PipelineState.
 
-        Stages:
-        1  GEOCODE     → resolve place to lat/lon
-        2  CHART       → NatalChart (cached)
-        3  DASHA       → DashaWindow (cached)
-        4  TRANSIT     → TransitOverlay (cached 24h)
-        5  VARGAS      → DivisionalCharts (cached)
-        6  YOGAS       → YogaDoshaBundle (cached)
-        7  FEATURES    → AstroFeatures + ScoreBreakdown (derived)
-        8  RAG         → Rules + Cases (parallel, cached)
-        9  SOLVE       → 5 specialist agents (parallel LLM, prompt-cached)
-        10 SYNTHESISE  → SynthesisAgent (1 LLM call, prompt-cached)
-        11 CRITIQUE    → CriticAgent (conditional)
-        12 REVISE      → ReviserAgent (conditional)
-        13 FORMAT      → StructuredReading (no LLM)
+        Computes: geocode → D1 natal chart → dasha → transit → D1–D60 vargas
+                  → yogas → shadbala → features → score.
+
+        No LLM calls are made. The returned state can be passed directly to
+        ``predict()`` (Phase 3) after optional calibration (Phase 2).
+
+        Returns
+        -------
+        PipelineState  (populated through stage_score)
         """
         state = PipelineState(request=request)
-
         import time
         t0 = time.monotonic()
 
-        # ── Engine stages (deterministic, all cached) ──────────────────────
         await self.stage_geocode(state)
         await self.stage_chart(state)
         await asyncio.gather(
@@ -197,27 +191,92 @@ class PipelineRunner:
             self.stage_vargas(state),
         )
         await self.stage_yogas(state)
+        await self.stage_shadbala(state)
         self.stage_features(state)
         self.stage_score(state)
 
-        # ── RAG (parallel) ────────────────────────────────────────────────
-        await self.stage_rag(state)
+        elapsed = time.monotonic() - t0
+        logger.info(
+            "Phase 1 complete: chart=%s elapsed=%.1fs",
+            state.chart_id[:8] if state.chart_id else "?", elapsed,
+        )
+        return state
 
-        # ── LLM stages ────────────────────────────────────────────────────
+    # ── Phase 3: predict (LLM synthesis on pre-computed state) ───────────
+
+    async def predict(
+        self,
+        state: "PipelineState",
+        query: str,
+        domain: str = "general",
+        calibration_weights: Optional[dict] = None,
+    ) -> StructuredReading:
+        """
+        Phase 3 — Run LLM agents on a pre-computed PipelineState.
+
+        Parameters
+        ----------
+        state                : PipelineState from compute_chart() (Phase 1).
+        query                : The user's question.
+        domain               : life domain (career|marriage|wealth|health|general).
+        calibration_weights  : dict from CalibrationResult.weights (Phase 2).
+                               If None, uses default scorer weights.
+
+        Returns
+        -------
+        StructuredReading
+        """
+        import time
+        t0 = time.monotonic()
+
+        # Inject query + domain into state
+        state.request.query  = query
+        state.request.domain = domain
+
+        # Re-score with calibrated weights if provided
+        if calibration_weights and state.features:
+            from vedic_astro.learning.scorer import WeightedScorer, ScoringWeights
+            cal_w = calibration_weights
+            w = ScoringWeights(
+                natal_weight=cal_w.get("natal",   0.20),
+                dasha_weight=cal_w.get("dasha",   0.30),
+                transit_weight=cal_w.get("transit", 0.20),
+                yoga_weight=cal_w.get("yoga",     0.20),
+                dosha_weight=cal_w.get("dosha",   0.10),
+            )
+            state.score = WeightedScorer(weights=w).score(state.features, domain=domain)
+
+        # Clear any previous LLM outputs so agents re-run with new query
+        state.agent_outputs  = {}
+        state.synthesis_raw  = ""
+        state.final_reading  = ""
+        state.critic_result  = None
+        state.retrieved_rules = {}
+        state.retrieved_cases = []
+
+        await self.stage_rag(state)
         self._lazy_init_agents()
         await self.stage_solve(state)
         await self.stage_synthesise(state)
         await self.stage_critique_and_revise(state)
-
-        # ── Format ────────────────────────────────────────────────────────
         reading = self.stage_format(state)
 
         elapsed = time.monotonic() - t0
         logger.info(
-            "Pipeline complete: chart=%s query=%r elapsed=%.1fs revised=%s",
-            state.chart_id[:8], request.query[:40], elapsed, reading.was_revised,
+            "Phase 3 complete: chart=%s query=%r elapsed=%.1fs",
+            state.chart_id[:8] if state.chart_id else "?", query[:40], elapsed,
         )
         return reading
+
+    # ── Main entry point (backward-compatible single call) ────────────────
+
+    async def run(self, request: ReadingRequest) -> StructuredReading:
+        """
+        Run the full pipeline in one call (backward-compatible).
+        Internally calls compute_chart() then predict().
+        """
+        state = await self.compute_chart(request)
+        return await self.predict(state, request.query, request.domain)
 
     # ── Stage: geocode ────────────────────────────────────────────────────
 
@@ -301,14 +360,35 @@ class PipelineRunner:
         if state.chart is None:
             return
         from vedic_astro.engines.varga_engine import compute_required_charts
-        # Request D9 + D10 + the query-domain varga
-        divisions = list({9, 10, *self._domain_vargas(state.request.domain)})
+        # Compute a comprehensive set of divisional charts: D1-D12, D16, D20, D24, D27, D30, D40, D45, D60
+        # plus domain-specific ones — all available from the varga engine
+        all_divisions = list({
+            1, 2, 3, 4, 7, 9, 10, 12, 16, 20, 24, 27, 30, 40, 45, 60,
+            *self._domain_vargas(state.request.domain),
+        })
         state.varga_charts = await asyncio.to_thread(
             compute_required_charts,
-            state.chart, divisions,
+            state.chart, all_divisions,
             skip_on_precision_error=True,
         )
         state.mark_done("vargas")
+
+    async def stage_shadbala(self, state: PipelineState) -> None:
+        """Compute Shadbala (six-fold planetary strength) for all planets."""
+        if getattr(state, "shadbala", None) is not None:
+            return
+        if state.chart is None:
+            return
+        try:
+            from vedic_astro.learning.shadbala import compute_shadbala
+            from datetime import datetime
+            b = state.request.birth
+            birth_dt = datetime(b.year, b.month, b.day, b.hour, b.minute)
+            state.shadbala = await asyncio.to_thread(compute_shadbala, state.chart, birth_dt)
+            state.mark_done("shadbala")
+        except Exception as exc:
+            logger.warning("Shadbala computation failed: %s", exc)
+            state.shadbala = {}
 
     @staticmethod
     def _domain_vargas(domain: str) -> list[int]:

@@ -149,11 +149,13 @@ class ScoringWeights:
     Global weight configuration for the weighted scorer.
 
     Weights are normalised internally so they don't need to sum to 1.
+    Can be constructed from a CalibrationResult.weights dict.
     """
     natal_weight:   float = 0.35
     dasha_weight:   float = 0.30
     transit_weight: float = 0.25
     yoga_weight:    float = 0.10
+    dosha_weight:   float = 0.10
 
     # Sade Sati severity multiplier applied to transit score (additive penalty)
     sadesati_penalty: float = 0.15
@@ -163,6 +165,17 @@ class ScoringWeights:
 
     # Combust planet penalty (applied to natal score)
     combust_penalty: float = 0.08
+
+    @classmethod
+    def from_calibration(cls, cal_weights: dict) -> "ScoringWeights":
+        """Create ScoringWeights from a CalibrationResult.weights dict."""
+        return cls(
+            natal_weight=cal_weights.get("natal",   0.35),
+            dasha_weight=cal_weights.get("dasha",   0.30),
+            transit_weight=cal_weights.get("transit", 0.25),
+            yoga_weight=cal_weights.get("yoga",     0.10),
+            dosha_weight=cal_weights.get("dosha",   0.10),
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

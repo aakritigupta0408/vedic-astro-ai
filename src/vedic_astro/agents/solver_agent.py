@@ -118,6 +118,48 @@ class SolverAgent:
         from vedic_astro.agents.pipeline import PipelineRunner
         self._runner = PipelineRunner()
 
+    async def compute_chart(
+        self,
+        birth,
+        query_date: Optional[date] = None,
+        domain: str = "general",
+        depth: int = 2,
+    ):
+        """
+        Phase 1 — compute all chart data without LLM calls.
+        Returns PipelineState populated with chart, dasha, transit,
+        D1–D60 vargas, yogas, shadbala, features and score.
+        """
+        from vedic_astro.agents.pipeline import ReadingRequest
+        request = ReadingRequest(
+            birth=birth,
+            query="",          # no question yet
+            domain=domain,
+            query_date=query_date,
+            depth=depth,
+        )
+        return await self._runner.compute_chart(request)
+
+    async def predict(
+        self,
+        chart_state,
+        query: str,
+        domain: str = "general",
+        calibration_weights: Optional[dict] = None,
+    ) -> SolverResult:
+        """
+        Phase 3 — run LLM prediction on a pre-computed chart state.
+        Accepts optional calibration_weights from Phase 2.
+        """
+        reading = await self._runner.predict(
+            chart_state, query, domain, calibration_weights
+        )
+        return SolverResult(
+            reading=reading,
+            pipeline_stages=reading.score.notes if reading.score else [],
+            from_cache=False,
+        )
+
     async def solve(
         self,
         birth,           # BirthData
