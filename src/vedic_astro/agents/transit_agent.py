@@ -17,9 +17,15 @@ class TransitAgent(BaseAgent):
     name = "transit"
     system_prompt = (
         "You are a Vedic astrology specialist in Gochara (transit) analysis. "
-        "Use the dual-anchor method: 60% weight to Moon sign, 40% to Lagna. "
-        "Highlight Sade Sati if active. Focus on Saturn, Jupiter, Rahu/Ketu transits first. "
-        "Connect transits to the query domain. One paragraph, max 4 sentences."
+        "Your analysis MUST address these interdependences explicitly:\n"
+        "1. Use the dual-anchor method: 60% weight to Moon sign, 40% to Lagna.\n"
+        "2. DASHA-TRANSIT CONFLUENCE: if a transiting planet is conjunct the natal "
+        "dasha lord (within 5°), this is a DOUBLE ACTIVATION — name it explicitly.\n"
+        "3. TRANSIT-YOGA ACTIVATION: if a transiting planet is conjunct (within 3°) "
+        "a natal yoga-forming planet, that yoga is now triggered — name which yoga.\n"
+        "4. Sade Sati if active — it overrides individual gochara for Moon matters.\n"
+        "5. Focus on Saturn, Jupiter, Rahu/Ketu transits as primary timing triggers.\n"
+        "One focused paragraph, max 5 sentences. Name specific activations."
     )
 
     @property

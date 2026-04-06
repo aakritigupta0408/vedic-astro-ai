@@ -101,32 +101,49 @@ class StructuredReading:
     retrieved_cases:       list[str] = field(default_factory=list)
 
     def to_markdown(self) -> str:
-        """Render the full reading as Markdown for the Gradio chat panel."""
+        """Render the full reading as Markdown for the Gradio chat panel.
+
+        Leads with the quantitative score table and formula so the answer
+        is deterministic and auditable before the narrative explanation.
+        """
+        domain_title = self.score.domain.replace("_", " ").title()
+        interp_label = self.score.interpretation.replace("_", " ").title()
+
         lines = [
-            f"### {self.score.interpretation.replace('_', ' ').title()} Reading",
+            f"## {domain_title} Score: {self.score.final_score:.3f} / 1.000 — {interp_label}",
             "",
-            self.final_reading,
+            "### Weighted Score Breakdown",
+            "",
+            self.score.score_table_md,
+            "",
+            f"**Formula:** {self.score.formula}",
             "",
             "---",
-            "**Weighted Analysis**",
+            "### Analysis",
             "",
-            self.weighted_summary,
+            self.final_reading,
         ]
 
+        if self.weighted_summary:
+            lines += [
+                "",
+                "---",
+                "### Layer-by-Layer Reasoning",
+                "",
+                self.weighted_summary,
+            ]
+
         if self.supporting_quotes:
-            lines += ["", "---", "**Classical References**", ""]
+            lines += ["", "---", "### Classical References", ""]
             for q in self.supporting_quotes[:3]:
                 lines += [
-                    f"> Quote: \"{q.text}\"",
-                    f"> Source: *{q.source}*",
-                    f"> *(Applies because: {q.relevance})*",
+                    f"> \"{q.text}\"",
+                    f"> — *{q.source}* ({q.relevance})",
                     "",
                 ]
 
-        if self.critic_notes:
-            lines += ["", "---", f"**Quality Score:** {self.score.final_score:.2f}"]
-            if self.was_revised:
-                lines.append("*(Reading was refined based on quality review)*")
+        if self.was_revised:
+            lines += ["", "*Reading was refined after quality review.*"]
 
         return "\n".join(lines)
 
@@ -136,12 +153,16 @@ class StructuredReading:
             "chart_id": self.chart_id,
             "score": {
                 "final": self.score.final_score,
+                "formula": self.score.formula,
                 "natal": self.score.natal_strength,
+                "natal_d1": self.score.d1_strength,
+                "natal_d9_navamsha": self.score.navamsha_strength,
                 "dasha": self.score.dasha_activation,
                 "transit": self.score.transit_trigger,
                 "yoga": self.score.yoga_support,
                 "dosha_penalty": self.score.dosha_penalty,
                 "interpretation": self.score.interpretation,
+                "weights_used": self.score.weights_used,
             },
             "was_revised": self.was_revised,
             "critic_notes": self.critic_notes,
@@ -243,10 +264,10 @@ def _build_weighted_summary(
     domain: str,
 ) -> str:
     """
-    Build a weighted summary paragraph from reasoning steps.
+    Build a weighted layer-by-layer summary from reasoning steps.
 
-    Format: "Natal foundation [35%] shows <finding>. Dasha timing [30%]…"
-    Ends with the composite score and interpretation.
+    Each layer shows its weight, numeric score, and the first sentence of
+    the agent's finding, so the reader can see exactly what drove the score.
     """
     parts = []
     for step in reasoning_chain:
@@ -254,15 +275,18 @@ def _build_weighted_summary(
             continue
         # Take first sentence of finding
         first_sentence = re.split(r"(?<=[.!?])\s+", step.finding.strip())[0]
-        parts.append(f"**{step.label} [{step.weight_pct}%]** — {first_sentence}")
+        score_stars = step.score_label
+        parts.append(
+            f"**{step.label} [{step.weight_pct}%] · {step.component_score:.2f} {score_stars}**\n"
+            f"{first_sentence}"
+        )
 
-    adj = _SCORE_ADJECTIVES.get(score.interpretation, "moderate")
-    summary_lines = "\n\n".join(parts)
-    composite = (
-        f"\n\nComposite score for *{domain}*: **{score.final_score:.2f}** ({adj}). "
-        f"Score notes: {'; '.join(score.notes[:3])}" if score.notes else ""
-    )
-    return summary_lines + composite
+    if score.notes:
+        notable = [n for n in score.notes if n][:4]
+        if notable:
+            parts.append("**Key factors:**\n" + "\n".join(f"- {n}" for n in notable))
+
+    return "\n\n".join(parts)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

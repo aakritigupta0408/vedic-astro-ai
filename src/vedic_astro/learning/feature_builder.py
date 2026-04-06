@@ -41,7 +41,28 @@ from pydantic import BaseModel, Field
 
 from vedic_astro.engines.natal_engine import (
     NatalChart, PlanetName, Dignity, SIGN_LORDS, compute_chara_karakas,
+    OWN_SIGNS, _EXALTATION, _DEBILITATION, _MOOLATRIKONA,
+    _NATURAL_FRIENDS, _NATURAL_ENEMIES,
 )
+
+
+def _d9_dignity_for_sign(planet: str, sign: int) -> str:
+    """
+    Compute Parashari dignity for *planet* (planet.value string) in *sign* (1-12).
+    Used for D9, D10, and other varga positions.
+    """
+    try:
+        pn = PlanetName(planet)
+        if sign == _EXALTATION.get(pn):      return "exalted"
+        if sign == _DEBILITATION.get(pn):    return "debilitated"
+        if sign == _MOOLATRIKONA.get(pn):    return "moolatrikona"
+        if sign in OWN_SIGNS.get(pn, set()): return "own"
+        sl = SIGN_LORDS.get(sign)
+        if sl and sl in _NATURAL_FRIENDS.get(pn, set()):  return "friend"
+        if sl and sl in _NATURAL_ENEMIES.get(pn, set()):  return "enemy"
+        return "neutral"
+    except Exception:
+        return "neutral"
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +106,12 @@ class AstroFeatures(BaseModel):
     net_yoga_strength: float = 0.0
     net_dosha_severity: float = 0.0
 
+    # Yoga structure (for interdependence checks)
+    yoga_forming_planets: dict[str, list[str]] = Field(default_factory=dict)
+    # yoga_name → [planet.value, …] — planets that form each yoga
+    yoga_key_houses: dict[str, list[int]] = Field(default_factory=dict)
+    # yoga_name → house numbers involved
+
     # ── Dasha timing ──────────────────────────────────────────────────────
     maha_lord: str = ""
     antar_lord: str = ""
@@ -100,12 +127,34 @@ class AstroFeatures(BaseModel):
     maha_lord_rules_houses: list[int] = Field(default_factory=list)  # houses lord rules natally
     antar_lord_rules_houses: list[int] = Field(default_factory=list)
 
+    # Dasha lord varga depth (D9/D10 dignity — how fully dasha can deliver)
+    maha_lord_d9_dignity: str = "neutral"     # dasha lord's dignity in D9
+    maha_lord_d10_dignity: str = "neutral"    # dasha lord's dignity in D10 (career)
+
+    # Dasha-Yoga interdependence
+    # Yogas whose contributing_planets include the active maha/antar lord
+    dasha_activates_yogas: list[str] = Field(default_factory=list)
+    antar_activates_yogas: list[str] = Field(default_factory=list)
+
     # ── Transit (Gochara) ─────────────────────────────────────────────────
     transit_signs: dict[str, int] = Field(default_factory=dict)
     gochara_strengths: dict[str, float] = Field(default_factory=dict)
     gochara_favorable: dict[str, bool] = Field(default_factory=dict)
     sadesati_active: bool = False
     sadesati_phase: Optional[str] = None
+
+    # Transit-Dasha confluence: transiting planet conjunct natal dasha lord (≤5°)
+    transit_conjunct_dasha_lord: bool = False
+    transit_conjunct_dasha_lord_planet: str = ""   # which transiting planet
+
+    # Transit-Yoga activation: transiting planets over yoga-forming natal planets (≤3°)
+    transit_activates_yogas: list[str] = Field(default_factory=list)
+    # yoga names whose key planets are hit by current transits
+
+    # Lagna lord placement modifiers
+    lagna_lord: str = ""
+    lagna_lord_house: int = 0
+    lagna_lord_dignity: str = "neutral"
 
     # ── Divisional charts (D1 is natal) ───────────────────────────────────
     # Keys are division numbers as strings ("9", "10", "3", etc.)
@@ -240,6 +289,13 @@ class FeatureBuilder:
         # ── Divisional charts ─────────────────────────────────────────────
         self._build_vargas(f, varga_charts, f.get("atmakaraka", ""))
 
+        # ── Cross-layer interdependences ──────────────────────────────────
+        # Must run AFTER all individual sections (reads from multiple sections)
+        self._build_interdependences(f)
+
+        # Strip private/temp keys before constructing model
+        f.pop("_transit_longitudes", None)
+
         return AstroFeatures(**f)
 
     # ── Private section builders ──────────────────────────────────────────
@@ -298,6 +354,7 @@ class FeatureBuilder:
                 active_yoga_names=[], active_dosha_names=[],
                 yoga_strengths={}, dosha_severities={},
                 net_yoga_strength=0.0, net_dosha_severity=0.0,
+                yoga_forming_planets={}, yoga_key_houses={},
             )
             return
 
@@ -314,6 +371,16 @@ class FeatureBuilder:
             if active_doshas else 0.0
         )
 
+        # Yoga structure for interdependence checks
+        f["yoga_forming_planets"] = {
+            y.name: [p.value for p in y.contributing_planets]
+            for y in active_yogas
+        }
+        f["yoga_key_houses"] = {
+            y.name: list(y.key_houses)
+            for y in active_yogas
+        }
+
     @staticmethod
     def _build_dasha(f: dict, chart: NatalChart, window) -> None:
         """Extract dasha timing features from DashaWindow."""
@@ -325,6 +392,9 @@ class FeatureBuilder:
                 antar_lord_house=0, antar_lord_sign=0, antar_lord_dignity="neutral",
                 dasha_lords_are_friends=False,
                 maha_lord_rules_houses=[], antar_lord_rules_houses=[],
+                maha_lord_d9_dignity="neutral", maha_lord_d10_dignity="neutral",
+                dasha_activates_yogas=[], antar_activates_yogas=[],
+                lagna_lord="", lagna_lord_house=0, lagna_lord_dignity="neutral",
             )
             return
 
@@ -355,6 +425,29 @@ class FeatureBuilder:
         f["maha_lord_rules_houses"]  = _houses_ruled_by(maha_v,  chart.lagna_sign)
         f["antar_lord_rules_houses"] = _houses_ruled_by(antar_v, chart.lagna_sign)
 
+        # Lagna lord (needed for interdependence checks)
+        try:
+            ll = SIGN_LORDS.get(chart.lagna_sign)
+            if ll:
+                ll_pos = chart.planets.get(ll)
+                f["lagna_lord"]         = ll.value
+                f["lagna_lord_house"]   = ll_pos.house if ll_pos else 0
+                f["lagna_lord_dignity"] = ll_pos.dignity.value if ll_pos else "neutral"
+            else:
+                f["lagna_lord"] = ""
+                f["lagna_lord_house"] = 0
+                f["lagna_lord_dignity"] = "neutral"
+        except Exception:
+            f["lagna_lord"] = ""
+            f["lagna_lord_house"] = 0
+            f["lagna_lord_dignity"] = "neutral"
+
+        # Placeholder fields filled later by _build_interdependences
+        f["maha_lord_d9_dignity"]  = "neutral"
+        f["maha_lord_d10_dignity"] = "neutral"
+        f["dasha_activates_yogas"] = []
+        f["antar_activates_yogas"] = []
+
     @staticmethod
     def _build_transit(f: dict, overlay) -> None:
         """Extract transit/gochara features from TransitOverlay."""
@@ -362,6 +455,8 @@ class FeatureBuilder:
             f.update(
                 transit_signs={}, gochara_strengths={}, gochara_favorable={},
                 sadesati_active=False, sadesati_phase=None,
+                transit_conjunct_dasha_lord=False, transit_conjunct_dasha_lord_planet="",
+                transit_activates_yogas=[],
             )
             return
 
@@ -369,8 +464,12 @@ class FeatureBuilder:
         gochara_strengths: dict[str, float] = {}
         gochara_favorable: dict[str, bool]  = {}
 
+        # Transit longitudes (for conjunction checks)
+        transit_longitudes: dict[str, float] = {}
+
         for planet, pos in overlay.snapshot.positions.items():
             transit_signs[planet.value] = pos.sign_number
+            transit_longitudes[planet.value] = pos.longitude
 
         for planet, strength in overlay.gochara.items():
             gochara_strengths[planet.value] = strength.composite_strength
@@ -381,6 +480,10 @@ class FeatureBuilder:
         f["gochara_favorable"] = gochara_favorable
         f["sadesati_active"]   = overlay.sadesati_active
         f["sadesati_phase"]    = overlay.sadesati_phase
+
+        # Store transit longitudes for interdependence computation
+        # (computed later when we have both natal and transit data)
+        f["_transit_longitudes"] = transit_longitudes  # private; used by _build_interdependences
 
     @staticmethod
     def _build_vargas(
@@ -430,3 +533,113 @@ class FeatureBuilder:
                 f["atmakaraka_d9_sign"] = 0
         else:
             f["atmakaraka_d9_sign"] = 0
+
+    @staticmethod
+    def _build_interdependences(f: dict) -> None:
+        """
+        Compute cross-layer interdependence features.
+
+        This runs AFTER all individual section builders so it can read
+        from natal, yoga, dasha, transit, and varga sections simultaneously.
+
+        Fills:
+        - maha_lord_d9_dignity / maha_lord_d10_dignity
+        - dasha_activates_yogas / antar_activates_yogas
+        - transit_conjunct_dasha_lord / transit_conjunct_dasha_lord_planet
+        - transit_activates_yogas
+        """
+        # ── 1. Dasha lord varga depth ──────────────────────────────────────
+        # What is the dasha lord's dignity in D9 and D10?
+        # This modifies how fully the dasha promise can manifest.
+        maha_v = f.get("maha_lord", "")
+        if maha_v:
+            d9_signs = f.get("d9_planet_signs", {})
+            d10_signs = f.get("d10_planet_signs", {})
+            if d9_signs:
+                d9_sign = d9_signs.get(maha_v)
+                if d9_sign:
+                    f["maha_lord_d9_dignity"] = _d9_dignity_for_sign(maha_v, d9_sign)
+            if d10_signs:
+                d10_sign = d10_signs.get(maha_v)
+                if d10_sign:
+                    f["maha_lord_d10_dignity"] = _d9_dignity_for_sign(maha_v, d10_sign)
+
+        # ── 2. Dasha-Yoga activation ───────────────────────────────────────
+        # A yoga is "activated" by the dasha if the maha/antar lord is one of
+        # the yoga-forming planets, OR if the dasha lord rules a key yoga house.
+        yoga_planets = f.get("yoga_forming_planets", {})   # yoga_name → [planet_values]
+        yoga_houses  = f.get("yoga_key_houses", {})        # yoga_name → [house numbers]
+        antar_v      = f.get("antar_lord", "")
+        maha_rules   = set(f.get("maha_lord_rules_houses", []))
+        antar_rules  = set(f.get("antar_lord_rules_houses", []))
+
+        dasha_activated: list[str] = []
+        antar_activated: list[str] = []
+        for yoga_name, planets in yoga_planets.items():
+            # Direct: dasha lord IS a yoga planet
+            if maha_v and maha_v in planets:
+                dasha_activated.append(yoga_name)
+            # Indirect: dasha lord rules a key house of the yoga
+            elif maha_rules & set(yoga_houses.get(yoga_name, [])):
+                dasha_activated.append(yoga_name)
+
+            if antar_v and antar_v in planets:
+                antar_activated.append(yoga_name)
+            elif antar_rules & set(yoga_houses.get(yoga_name, [])):
+                antar_activated.append(yoga_name)
+
+        f["dasha_activates_yogas"] = dasha_activated
+        f["antar_activates_yogas"] = antar_activated
+
+        # ── 3. Transit-Dasha confluence ────────────────────────────────────
+        # Is any transiting planet conjunct (within 5°) the natal dasha lord?
+        # This is the "double activation" — same planet's timing in two systems.
+        transit_lons = f.get("_transit_longitudes", {})    # planet → transit longitude
+        natal_lons   = f.get("planet_longitudes", {})      # planet → natal longitude
+
+        conj_planet = ""
+        conj_found  = False
+        if maha_v and transit_lons and natal_lons:
+            natal_dasha_lon = natal_lons.get(maha_v)
+            if natal_dasha_lon is not None:
+                for t_planet, t_lon in transit_lons.items():
+                    diff = abs(t_lon - natal_dasha_lon) % 360.0
+                    if diff > 180.0:
+                        diff = 360.0 - diff
+                    if diff <= 5.0:          # conjunction orb: 5°
+                        conj_found  = True
+                        conj_planet = t_planet
+                        break
+                    # Also check opposition (180° aspect, within 4°)
+                    if abs(diff - 180.0) <= 4.0:
+                        conj_found  = True
+                        conj_planet = f"{t_planet}(opp)"
+                        break
+
+        f["transit_conjunct_dasha_lord"] = conj_found
+        f["transit_conjunct_dasha_lord_planet"] = conj_planet
+
+        # ── 4. Transit-Yoga activation ─────────────────────────────────────
+        # A yoga is "transit-activated" if any transiting planet is within 3°
+        # of the natal longitude of any of the yoga's forming planets.
+        transit_activated_yogas: list[str] = []
+        if transit_lons and natal_lons:
+            for yoga_name, planets in yoga_planets.items():
+                triggered = False
+                for yoga_planet in planets:
+                    natal_lon = natal_lons.get(yoga_planet)
+                    if natal_lon is None:
+                        continue
+                    for t_lon in transit_lons.values():
+                        diff = abs(t_lon - natal_lon) % 360.0
+                        if diff > 180.0:
+                            diff = 360.0 - diff
+                        if diff <= 3.0:      # tight conjunction orb: 3°
+                            triggered = True
+                            break
+                    if triggered:
+                        break
+                if triggered:
+                    transit_activated_yogas.append(yoga_name)
+
+        f["transit_activates_yogas"] = transit_activated_yogas

@@ -266,119 +266,370 @@ def search_places(query: str) -> list[str]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 CSS = """
-* { box-sizing: border-box; }
+/* ═══════════════════════════════════════════════════════════════
+   Vedic Astrology AI — Apple iOS-inspired mobile-first UI v0.2.0
+   Design language: iOS 17 / visionOS human interface guidelines
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Reset & base ─────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
 body, .gradio-container {
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
-                 "Helvetica Neue", Arial, sans-serif !important;
-    background: #f5f5f7 !important;
-    color: #1d1d1f !important;
-}
-.gradio-container { max-width: 1440px !important; margin: 0 auto !important; padding: 0 2rem 3rem !important; }
-
-/* Header */
-.hdr { text-align: center; padding: 2.5rem 1rem 1.8rem; }
-.hdr h1 { font-size: 2.4rem; font-weight: 700; letter-spacing: -0.04em; color: #1d1d1f; margin: 0 0 0.4rem; line-height: 1.1; }
-.hdr p { font-size: 0.95rem; color: #6e6e73; margin: 0; letter-spacing: -0.01em; }
-
-/* Phase stepper */
-.stepper { display: flex; justify-content: center; gap: 0; margin-bottom: 1.8rem; }
-.step { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 1.2rem;
-        font-size: 0.8rem; font-weight: 600; color: #aeaeb2; border-bottom: 2px solid transparent;
-        cursor: default; letter-spacing: -0.01em; }
-.step.active { color: #0071e3; border-bottom-color: #0071e3; }
-.step.done   { color: #34c759; border-bottom-color: #34c759; }
-.step-num { display: inline-flex; align-items: center; justify-content: center;
-            width: 1.3rem; height: 1.3rem; border-radius: 50%;
-            background: #e8e8ed; color: #6e6e73; font-size: 0.7rem; font-weight: 700; }
-.step.active .step-num { background: #0071e3; color: #fff; }
-.step.done   .step-num { background: #34c759; color: #fff; }
-
-/* Cards */
-.card { background: #fff; border-radius: 16px; padding: 1.4rem 1.3rem; box-shadow: 0 1px 8px rgba(0,0,0,0.07); }
-
-/* Section labels */
-.sec-label { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em;
-             text-transform: uppercase; color: #aeaeb2; margin: 1.1rem 0 0.45rem;
-             display: block; line-height: 1; }
-.sec-label:first-child { margin-top: 0; }
-
-/* Inputs */
-label > span { font-size: 0.8rem !important; font-weight: 500 !important; color: #3a3a3c !important; }
-input[type=number], input[type=text], textarea {
-    background: #f5f5f7 !important; border: 1.5px solid #e5e5ea !important;
-    border-radius: 9px !important; font-size: 0.88rem !important;
-    color: #1d1d1f !important; font-family: inherit !important;
-    transition: border-color 0.15s, box-shadow 0.15s !important;
-}
-input:focus, textarea:focus {
-    background: #fff !important; border-color: #0071e3 !important;
-    box-shadow: 0 0 0 3px rgba(0,113,227,0.12) !important; outline: none !important;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+                 "SF Pro Text", "Helvetica Neue", Arial, sans-serif !important;
+    background: #F2F2F7 !important;          /* iOS grouped bg */
+    color: #1C1C1E !important;               /* iOS label */
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
 }
 
-/* Buttons */
-.btn-primary { background: #0071e3 !important; color: #fff !important; border: none !important;
-               border-radius: 980px !important; font-weight: 600 !important;
-               font-size: 0.9rem !important; min-height: 40px !important;
-               padding: 0 1.4rem !important; font-family: inherit !important;
-               transition: background 0.15s !important; white-space: nowrap !important; }
-.btn-primary:hover { background: #0077ed !important; }
-.btn-primary:active { background: #006edb !important; transform: scale(0.97) !important; }
-.btn-secondary { background: #e8e8ed !important; color: #1d1d1f !important; border: none !important;
-                 border-radius: 980px !important; font-weight: 500 !important;
-                 font-size: 0.82rem !important; min-height: 34px !important;
-                 padding: 0 1rem !important; font-family: inherit !important; }
-.btn-secondary:hover { background: #d2d2d7 !important; }
+.gradio-container {
+    max-width: 520px !important;             /* Phone-width first */
+    margin: 0 auto !important;
+    padding: 0 0 env(safe-area-inset-bottom, 1.5rem) !important;
+}
 
-/* Chat */
-.chatbot { border: 1.5px solid #e5e5ea !important; border-radius: 14px !important; }
-.chatbot .message { font-size: 0.9rem !important; line-height: 1.7 !important; }
-.query-box textarea { border-radius: 12px !important; border: 1.5px solid #e5e5ea !important;
-                      background: #f5f5f7 !important; font-size: 0.92rem !important; resize: none !important; min-height: 60px !important; }
-.query-box textarea:focus { background: #fff !important; border-color: #0071e3 !important;
-                             box-shadow: 0 0 0 3px rgba(0,113,227,0.12) !important; }
+/* Wider on tablet/desktop */
+@media (min-width: 768px) {
+    .gradio-container { max-width: 820px !important; padding: 0 1rem 3rem !important; }
+}
+@media (min-width: 1100px) {
+    .gradio-container { max-width: 1200px !important; }
+}
 
-/* Status */
-.status-line { font-size: 0.78rem !important; color: #aeaeb2 !important; text-align: center; padding: 2px 0; }
-.status-line p { margin: 0 !important; }
+/* ── Sticky iOS-style navigation header ───────────────────────── */
+.ios-nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(242,242,247,0.85) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 0.5px solid rgba(60,60,67,0.18);
+    padding: env(safe-area-inset-top, 0) 0 0;
+}
 
-/* Calibration */
-.cal-question { background: #f5f5f7; border-radius: 10px; padding: 0.9rem 1rem;
-                margin-bottom: 0.8rem; border-left: 3px solid #0071e3; }
-.cal-question label { font-size: 0.88rem !important; font-weight: 500 !important; color: #1d1d1f !important; }
-.cal-prediction { font-size: 0.75rem; color: #6e6e73; margin-top: 0.3rem; font-style: italic; }
-.cal-score { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px;
-             padding: 1rem; margin-top: 0.5rem; font-size: 0.85rem; }
+/* ── Header ───────────────────────────────────────────────────── */
+.hdr {
+    text-align: center;
+    padding: 2rem 1.2rem 0.8rem;
+    background: linear-gradient(180deg, #fff 0%, #F2F2F7 100%);
+    border-bottom: 0.5px solid rgba(60,60,67,0.10);
+}
+.hdr h1 {
+    font-size: 1.9rem; font-weight: 700;
+    letter-spacing: -0.035em; color: #1C1C1E;
+    margin: 0 0 0.3rem; line-height: 1.1;
+    background: linear-gradient(135deg, #1C1C1E 0%, #3a3a3c 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.hdr p {
+    font-size: 0.82rem; color: #8E8E93;
+    margin: 0; letter-spacing: -0.005em;
+    line-height: 1.5;
+}
+@media (min-width: 768px) {
+    .hdr h1 { font-size: 2.6rem; }
+    .hdr p  { font-size: 0.95rem; }
+}
 
-/* Tabs */
-.tab-nav { border-bottom: 1px solid #e5e5ea !important; }
-.tab-nav button { font-size: 0.79rem !important; font-weight: 500 !important; color: #6e6e73 !important;
-                  border: none !important; border-bottom: 2px solid transparent !important;
-                  border-radius: 0 !important; padding: 0.45rem 0.8rem !important;
-                  background: transparent !important; font-family: inherit !important; }
-.tab-nav button.selected { color: #0071e3 !important; border-bottom-color: #0071e3 !important; font-weight: 600 !important; }
+/* ── Phase stepper — iOS segmented control style ─────────────── */
+.stepper {
+    display: flex; justify-content: center;
+    gap: 0; margin: 0; padding: 0.9rem 1.2rem 0;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+.stepper::-webkit-scrollbar { display: none; }
+.step {
+    display: flex; align-items: center; gap: 0.4rem;
+    padding: 0.55rem 1rem;
+    font-size: 0.75rem; font-weight: 600;
+    color: #8E8E93; border-bottom: 2.5px solid transparent;
+    cursor: default; letter-spacing: -0.01em;
+    white-space: nowrap; transition: all 0.2s ease;
+    min-height: 44px;                        /* iOS touch target */
+}
+.step.active { color: #007AFF; border-bottom-color: #007AFF; }
+.step.done   { color: #30D158; border-bottom-color: #30D158; }
+.step-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.25rem; height: 1.25rem; border-radius: 50%;
+    background: #E5E5EA; color: #8E8E93;
+    font-size: 0.65rem; font-weight: 700;
+    transition: all 0.2s ease; flex-shrink: 0;
+}
+.step.active .step-num { background: #007AFF; color: #fff; }
+.step.done   .step-num { background: #30D158; color: #fff; }
 
-/* Panels */
-.panel-md { font-size: 0.87rem !important; line-height: 1.75 !important; }
-.panel-md h3 { font-size: 0.88rem !important; font-weight: 600 !important; margin: 0.9rem 0 0.2rem !important; }
-.panel-md p  { margin: 0.3rem 0 !important; }
-.panel-md blockquote { border-left: 2px solid #d2d2d7; margin: 0.4rem 0;
-                        padding: 0.25rem 0.7rem; color: #6e6e73; font-size: 0.83rem; }
-.panel-md code { background: #f5f5f7; padding: 1px 5px; border-radius: 4px; font-size: 0.83rem; }
+/* ── iOS-style grouped cards ──────────────────────────────────── */
+.card {
+    background: #fff !important;
+    border-radius: 16px !important;
+    padding: 1.2rem 1rem !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 20px rgba(0,0,0,0.04) !important;
+    margin-bottom: 0 !important;
+}
+@media (min-width: 768px) {
+    .card { padding: 1.5rem 1.4rem !important; border-radius: 18px !important; }
+}
 
-/* BPHS rules */
-.rule-pill { background: #f5f5f7; border-radius: 9px; padding: 0.5rem 0.8rem;
-             margin: 0.3rem 0; font-size: 0.8rem; line-height: 1.55; color: #3a3a3c; display: block; }
-.rule-pill-label { font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
-                   letter-spacing: 0.07em; color: #aeaeb2; display: block; margin-bottom: 0.15rem; }
+/* ── Section labels — iOS grouped section header style ───────── */
+.sec-label {
+    font-size: 0.62rem !important; font-weight: 600 !important;
+    letter-spacing: 0.075em !important; text-transform: uppercase !important;
+    color: #8E8E93 !important; margin: 1.2rem 0 0.5rem !important;
+    display: block !important; line-height: 1 !important;
+    padding-left: 0.1rem !important;
+}
+.sec-label:first-child { margin-top: 0 !important; }
 
-/* Score table */
-.score-tbl table { font-size: 0.84rem !important; }
-.score-tbl th { font-size: 0.72rem !important; font-weight: 700 !important;
-                text-transform: uppercase !important; letter-spacing: 0.05em !important; color: #6e6e73 !important; }
+.sec-heading {
+    font-size: 0.62rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.075em; color: #8E8E93;
+    margin: 0 0 0.75rem; padding-left: 0.1rem;
+}
 
-.sec-heading { font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
-               letter-spacing: 0.08em; color: #aeaeb2; margin: 0 0 0.8rem; }
-footer, .built-with { display: none !important; }
+/* ── Inputs — iOS text field style ───────────────────────────── */
+label > span {
+    font-size: 0.82rem !important; font-weight: 500 !important;
+    color: #3A3A3C !important; letter-spacing: -0.005em !important;
+}
+input[type=number], input[type=text], textarea, select {
+    background: #F2F2F7 !important;
+    border: 1px solid rgba(60,60,67,0.13) !important;
+    border-radius: 10px !important;
+    font-size: 0.92rem !important;
+    color: #1C1C1E !important;
+    font-family: inherit !important;
+    padding: 0.7rem 0.8rem !important;
+    min-height: 44px !important;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease !important;
+}
+input[type=number]:focus, input[type=text]:focus, textarea:focus, select:focus {
+    background: #fff !important;
+    border-color: #007AFF !important;
+    box-shadow: 0 0 0 3.5px rgba(0,122,255,0.15) !important;
+    outline: none !important;
+}
+
+/* ── Buttons — iOS pill style ─────────────────────────────────── */
+.btn-primary {
+    background: #007AFF !important; color: #fff !important;
+    border: none !important; border-radius: 980px !important;
+    font-weight: 600 !important; font-size: 0.95rem !important;
+    min-height: 50px !important; padding: 0 1.8rem !important;
+    font-family: inherit !important; width: 100% !important;
+    letter-spacing: -0.01em !important;
+    transition: background 0.15s ease, transform 0.12s ease,
+                box-shadow 0.15s ease !important;
+    box-shadow: 0 2px 12px rgba(0,122,255,0.30) !important;
+}
+.btn-primary:hover {
+    background: #0A84FF !important;
+    box-shadow: 0 4px 16px rgba(0,122,255,0.38) !important;
+}
+.btn-primary:active { transform: scale(0.97) !important; background: #0071E3 !important; }
+
+.btn-secondary {
+    background: #E5E5EA !important; color: #3A3A3C !important;
+    border: none !important; border-radius: 980px !important;
+    font-weight: 500 !important; font-size: 0.86rem !important;
+    min-height: 40px !important; padding: 0 1.2rem !important;
+    font-family: inherit !important;
+    transition: background 0.15s ease !important;
+}
+.btn-secondary:hover { background: #D1D1D6 !important; }
+.btn-secondary:active { transform: scale(0.97) !important; }
+
+/* ── Chat — iMessage bubble style ────────────────────────────── */
+.chatbot {
+    border: 1px solid rgba(60,60,67,0.12) !important;
+    border-radius: 16px !important;
+    background: #F2F2F7 !important;
+    overflow: hidden !important;
+}
+.chatbot .message {
+    font-size: 0.92rem !important; line-height: 1.72 !important;
+    letter-spacing: -0.005em !important;
+}
+/* User bubble */
+.chatbot .message.user {
+    background: #007AFF !important;
+    color: #fff !important;
+    border-radius: 18px 18px 4px 18px !important;
+    margin-left: auto !important;
+    max-width: 85% !important;
+}
+/* Assistant bubble */
+.chatbot .message.bot, .chatbot .message.assistant {
+    background: #fff !important;
+    border-radius: 18px 18px 18px 4px !important;
+    max-width: 95% !important;
+    border: 1px solid rgba(60,60,67,0.08) !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
+}
+
+.query-box textarea {
+    border-radius: 12px !important;
+    border: 1px solid rgba(60,60,67,0.13) !important;
+    background: #fff !important;
+    font-size: 0.95rem !important;
+    resize: none !important;
+    min-height: 52px !important;
+    line-height: 1.55 !important;
+    padding: 0.7rem 1rem !important;
+}
+.query-box textarea:focus {
+    border-color: #007AFF !important;
+    box-shadow: 0 0 0 3.5px rgba(0,122,255,0.15) !important;
+}
+
+/* ── Send button — circular iOS style ────────────────────────── */
+.ask-btn {
+    min-height: 52px !important; min-width: 52px !important;
+    width: 52px !important; border-radius: 50% !important;
+    padding: 0 !important; font-size: 1.2rem !important;
+    box-shadow: 0 2px 10px rgba(0,122,255,0.30) !important;
+}
+
+/* ── Status line ──────────────────────────────────────────────── */
+.status-line { font-size: 0.78rem !important; color: #8E8E93 !important; text-align: center; }
+.status-line p { margin: 0.25rem 0 !important; }
+
+/* ── Tabs — iOS style ─────────────────────────────────────────── */
+.tab-nav, [data-testid="tab-nav"] {
+    border-bottom: 0.5px solid rgba(60,60,67,0.18) !important;
+    overflow-x: auto !important; -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    background: #fff !important;
+    border-radius: 12px 12px 0 0 !important;
+    padding: 0 0.5rem !important;
+}
+.tab-nav::-webkit-scrollbar { display: none !important; }
+.tab-nav button {
+    font-size: 0.78rem !important; font-weight: 500 !important;
+    color: #8E8E93 !important; border: none !important;
+    border-bottom: 2.5px solid transparent !important;
+    border-radius: 0 !important; padding: 0.6rem 0.9rem !important;
+    background: transparent !important; font-family: inherit !important;
+    white-space: nowrap !important; min-height: 44px !important;
+    transition: color 0.15s, border-color 0.15s !important;
+}
+.tab-nav button.selected {
+    color: #007AFF !important;
+    border-bottom-color: #007AFF !important;
+    font-weight: 600 !important;
+}
+
+/* ── Markdown panels ──────────────────────────────────────────── */
+.panel-md { font-size: 0.88rem !important; line-height: 1.75 !important; letter-spacing: -0.005em !important; }
+.panel-md h1, .panel-md h2 { font-size: 1rem !important; font-weight: 700 !important; margin: 1rem 0 0.3rem !important; }
+.panel-md h3 { font-size: 0.9rem !important; font-weight: 600 !important; margin: 0.9rem 0 0.25rem !important; }
+.panel-md p  { margin: 0.35rem 0 !important; }
+.panel-md table { font-size: 0.82rem !important; border-collapse: collapse !important; width: 100% !important; }
+.panel-md td, .panel-md th { padding: 0.4rem 0.6rem !important; border-bottom: 0.5px solid #E5E5EA !important; }
+.panel-md th { font-weight: 600 !important; color: #8E8E93 !important; font-size: 0.72rem !important; text-transform: uppercase !important; letter-spacing: 0.05em !important; }
+.panel-md blockquote {
+    border-left: 3px solid #007AFF; margin: 0.5rem 0;
+    padding: 0.3rem 0.75rem; color: #8E8E93; font-size: 0.84rem;
+    background: rgba(0,122,255,0.04); border-radius: 0 8px 8px 0;
+}
+.panel-md code {
+    background: #F2F2F7; padding: 2px 6px;
+    border-radius: 5px; font-size: 0.83rem;
+    color: #FF3B30; font-family: "SF Mono", "Fira Code", monospace;
+}
+
+/* ── Calibration section ──────────────────────────────────────── */
+.cal-question {
+    background: #F2F2F7; border-radius: 12px;
+    padding: 1rem 1.1rem; margin-bottom: 0.75rem;
+    border-left: 3px solid #007AFF;
+}
+.cal-question label { font-size: 0.9rem !important; font-weight: 500 !important; color: #1C1C1E !important; }
+.cal-prediction { font-size: 0.76rem; color: #8E8E93; margin-top: 0.35rem; font-style: italic; }
+.cal-score {
+    background: rgba(48,209,88,0.08); border: 1px solid rgba(48,209,88,0.30);
+    border-radius: 12px; padding: 1rem; margin-top: 0.5rem;
+    font-size: 0.86rem; color: #1C1C1E;
+}
+
+/* ── BPHS rule pills ──────────────────────────────────────────── */
+.rule-pill {
+    background: #F2F2F7; border-radius: 10px;
+    padding: 0.6rem 0.9rem; margin: 0.3rem 0;
+    font-size: 0.81rem; line-height: 1.55; color: #3A3A3C;
+    display: block; border: 0.5px solid rgba(60,60,67,0.10);
+}
+.rule-pill-label {
+    font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #8E8E93; display: block; margin-bottom: 0.18rem;
+}
+
+/* ── Score table ──────────────────────────────────────────────── */
+.score-tbl { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
+.score-tbl table { font-size: 0.83rem !important; min-width: 360px !important; }
+.score-tbl th {
+    font-size: 0.68rem !important; font-weight: 700 !important;
+    text-transform: uppercase !important; letter-spacing: 0.06em !important;
+    color: #8E8E93 !important; padding: 0.4rem 0.5rem !important;
+}
+.score-tbl td { padding: 0.45rem 0.5rem !important; font-size: 0.83rem !important; }
+
+/* ── Accordion — iOS grouped list style ──────────────────────── */
+.accordion, details {
+    background: #fff !important; border-radius: 16px !important;
+    border: none !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 20px rgba(0,0,0,0.04) !important;
+    overflow: hidden !important;
+}
+.accordion > .label-wrap, details > summary {
+    font-size: 0.95rem !important; font-weight: 600 !important;
+    padding: 1rem 1.2rem !important; min-height: 52px !important;
+    color: #1C1C1E !important; letter-spacing: -0.01em !important;
+    border-bottom: 0.5px solid rgba(60,60,67,0.10) !important;
+    display: flex !important; align-items: center !important;
+}
+/* Phase 2 accordion open label */
+.accordion .icon { color: #007AFF !important; }
+
+/* ── Dropdown / select ────────────────────────────────────────── */
+.gr-dropdown > div, [data-testid="dropdown"] > div {
+    border-radius: 10px !important;
+    border: 1px solid rgba(60,60,67,0.13) !important;
+    background: #F2F2F7 !important;
+}
+
+/* ── Spacing helpers ──────────────────────────────────────────── */
+.gap-sm { height: 0.75rem; }
+.gap-md { height: 1.25rem; }
+.gap-lg { height: 2rem; }
+
+/* ── Examples section ─────────────────────────────────────────── */
+.examples-table { font-size: 0.82rem !important; border-radius: 12px !important; overflow: hidden !important; }
+.examples-table td, .examples-table th { padding: 0.5rem 0.7rem !important; font-size: 0.8rem !important; }
+
+/* ── Mobile-specific overrides ────────────────────────────────── */
+@media (max-width: 520px) {
+    .hdr { padding: 1.5rem 1rem 0.7rem; }
+    .hdr h1 { font-size: 1.6rem; }
+    .card { border-radius: 14px !important; }
+    .btn-primary { font-size: 0.9rem !important; min-height: 48px !important; }
+
+    /* Stack rows vertically on small screens */
+    .gr-row { flex-direction: column !important; }
+    .gr-row > * { min-width: 100% !important; width: 100% !important; }
+
+    /* Full-width chat */
+    .chatbot { height: 360px !important; }
+    .panel-md table { font-size: 0.76rem !important; }
+
+    /* Bigger touch targets for number inputs */
+    input[type=number] { min-height: 48px !important; font-size: 1rem !important; text-align: center !important; }
+}
+
+/* ── Hide Gradio chrome ───────────────────────────────────────── */
+footer, .built-with, #footer, .svelte-1ipelgc { display: none !important; }
+.gr-prose p:last-child { margin-bottom: 0; }
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -432,7 +683,7 @@ def auto_domain(query: str, explicit: str) -> str:
     return "general"
 
 
-_EMPTY_DF = pd.DataFrame(columns=["Layer", "Weight %", "Score", "Rating"])
+_EMPTY_DF = pd.DataFrame(columns=["Layer", "Weight %", "Score", "Contribution", "Rating"])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -703,13 +954,59 @@ def _render_score_df(state) -> pd.DataFrame:
         return _EMPTY_DF.copy()
     try:
         s = state.score
+        w = getattr(s, "weights_used", None) or {"natal": 0.35, "dasha": 0.30, "transit": 0.25, "yoga": 0.10}
+        wn = w.get("natal",   0.35)
+        wd = w.get("dasha",   0.30)
+        wt = w.get("transit", 0.25)
+        wy = w.get("yoga",    0.10)
         rows = [
-            {"Layer": "Natal Strength",    "Weight %": 35, "Score": f"{s.natal_strength:.2f}",    "Rating": _score_label(s.natal_strength)},
-            {"Layer": "Dasha Activation",  "Weight %": 30, "Score": f"{s.dasha_activation:.2f}",  "Rating": _score_label(s.dasha_activation)},
-            {"Layer": "Transit Trigger",   "Weight %": 25, "Score": f"{s.transit_trigger:.2f}",   "Rating": _score_label(s.transit_trigger)},
-            {"Layer": "Yoga Support",      "Weight %": 10, "Score": f"{s.yoga_support:.2f}",      "Rating": _score_label(s.yoga_support)},
-            {"Layer": "Dosha Penalty",     "Weight %": -10, "Score": f"{s.dosha_penalty:.2f}",    "Rating": ""},
-            {"Layer": "COMPOSITE",         "Weight %": 100, "Score": f"{s.final_score:.2f}",
+            {"Layer": "Natal (D1+D9 blend)",
+             "Weight %": f"{wn*100:.0f}%",
+             "Score": f"{s.natal_strength:.3f}",
+             "Contribution": f"{wn*s.natal_strength:+.3f}",
+             "Rating": _score_label(s.natal_strength)},
+        ]
+        # Sub-rows for D1 and D9 if available
+        if getattr(s, "d1_strength", 0) or getattr(s, "navamsha_strength", 0):
+            rows.append({
+                "Layer": "  └ D1 Natal chart (70%)",
+                "Weight %": "—",
+                "Score": f"{getattr(s, 'd1_strength', s.natal_strength):.3f}",
+                "Contribution": "—",
+                "Rating": _score_label(getattr(s, "d1_strength", s.natal_strength)),
+            })
+            rows.append({
+                "Layer": "  └ D9 Navamsha (30%)",
+                "Weight %": "—",
+                "Score": f"{getattr(s, 'navamsha_strength', 0):.3f}",
+                "Contribution": "—",
+                "Rating": _score_label(getattr(s, "navamsha_strength", 0)),
+            })
+        rows += [
+            {"Layer": "Dasha Activation",
+             "Weight %": f"{wd*100:.0f}%",
+             "Score": f"{s.dasha_activation:.3f}",
+             "Contribution": f"{wd*s.dasha_activation:+.3f}",
+             "Rating": _score_label(s.dasha_activation)},
+            {"Layer": "Transit Trigger",
+             "Weight %": f"{wt*100:.0f}%",
+             "Score": f"{s.transit_trigger:.3f}",
+             "Contribution": f"{wt*s.transit_trigger:+.3f}",
+             "Rating": _score_label(s.transit_trigger)},
+            {"Layer": "Yoga Support",
+             "Weight %": f"{wy*100:.0f}%",
+             "Score": f"{s.yoga_support:.3f}",
+             "Contribution": f"{wy*s.yoga_support:+.3f}",
+             "Rating": _score_label(s.yoga_support)},
+            {"Layer": "Dosha Penalty",
+             "Weight %": "−20% of penalty",
+             "Score": f"{s.dosha_penalty:.3f}",
+             "Contribution": f"{-0.20*s.dosha_penalty:+.3f}",
+             "Rating": ""},
+            {"Layer": "── COMPOSITE ──",
+             "Weight %": "",
+             "Score": f"{s.final_score:.3f}",
+             "Contribution": "",
              "Rating": s.interpretation.replace("_", " ").title()},
         ]
         return pd.DataFrame(rows)
@@ -762,11 +1059,11 @@ def build_demo() -> gr.Blocks:
         # ── Header ────────────────────────────────────────────────────────
         gr.HTML("""
         <div class="hdr">
-          <h1>Vedic Astrology AI</h1>
-          <p>Classical Parashari readings · Swiss Ephemeris · D1–D60 · Shadbala · BPHS rules · Multi-agent AI</p>
+          <h1>✦ Vedic Astrology AI</h1>
+          <p>Classical Parashari · Swiss Ephemeris · D1–D60 · Shadbala · BPHS rules · Multi-agent AI</p>
         </div>
         <div class="stepper">
-          <div class="step active" id="step1"><span class="step-num">1</span> Compute Chart</div>
+          <div class="step active" id="step1"><span class="step-num">1</span> Chart</div>
           <div class="step" id="step2"><span class="step-num">2</span> Calibrate</div>
           <div class="step" id="step3"><span class="step-num">3</span> Ask</div>
         </div>
@@ -826,85 +1123,93 @@ def build_demo() -> gr.Blocks:
                     with gr.TabItem("Score"):
                         score_df = gr.DataFrame(value=_EMPTY_DF.copy(), interactive=False, elem_classes="score-tbl")
 
-        gr.HTML('<div style="height:1.5rem"></div>')
+        gr.HTML('<div class="gap-md"></div>')
 
         # ══════════════════════════════════════════════════════════════════
         # PHASE 2 — Calibration
         # ══════════════════════════════════════════════════════════════════
-        with gr.Accordion("Phase 2 — Calibrate Weights (optional but recommended)", open=False):
+        with gr.Accordion("⚖️  Phase 2 — Calibrate Weights (optional)", open=False):
             gr.Markdown(
-                "Answer these questions about past life events. "
-                "The system compares your answers against what your chart predicted "
-                "to calibrate how much weight each factor gets in your reading.\n\n"
-                "*Skip any questions that don't apply — unanswered questions default to neutral weight.*"
+                "Answer questions about past life events. "
+                "Your answers calibrate how much weight each astrological factor gets.\n\n"
+                "*Skip questions that don't apply — they default to neutral weight.*"
             )
-            gen_cal_btn = gr.Button("Generate My Calibration Questions", elem_classes="btn-secondary")
+            gen_cal_btn = gr.Button("Generate Calibration Questions", elem_classes="btn-secondary")
             cal_status  = gr.Markdown("")
 
-            # 10 question/answer/prediction slots
             cal_q_labels  = []
             cal_answers   = []
             cal_predicted = []
 
             for i in range(10):
                 with gr.Group(visible=True, elem_classes="cal-question"):
-                    q_label = gr.Markdown(f"*Q{i+1} will appear after clicking Generate.*")
-                    ans     = gr.Textbox(label=f"Your answer", placeholder="e.g. 2018  or  Yes  or  skip", show_label=True, lines=1)
+                    q_label = gr.Markdown(f"*Q{i+1} — tap Generate above.*")
+                    ans     = gr.Textbox(label="Your answer", placeholder="e.g. 2018  or  Yes  or  skip", show_label=True, lines=1)
                     pred    = gr.Markdown("", elem_classes="cal-prediction")
                     cal_q_labels.append(q_label)
                     cal_answers.append(ans)
                     cal_predicted.append(pred)
 
-            score_cal_btn = gr.Button("Score My Answers & Calibrate Weights", elem_classes="btn-primary")
+            score_cal_btn = gr.Button("Score & Calibrate Weights", elem_classes="btn-primary")
             cal_result_md = gr.Markdown("", elem_classes="cal-score")
 
-        gr.HTML('<div style="height:1.5rem"></div>')
+        gr.HTML('<div class="gap-md"></div>')
 
         # ══════════════════════════════════════════════════════════════════
         # PHASE 3 — Ask
         # ══════════════════════════════════════════════════════════════════
         with gr.Row(equal_height=False):
 
-            with gr.Column(scale=3):
+            # Chat column (full width on mobile, 3/5 on desktop)
+            with gr.Column(scale=3, elem_classes="card"):
+                gr.HTML('<p class="sec-heading">💬 Phase 3 — Ask your question</p>')
+
                 chatbot = gr.Chatbot(
-                    label="", height=460, type="messages",
+                    label="", height=420, type="messages",
                     show_copy_button=True, show_label=False,
                     elem_classes="chatbot",
                     placeholder=(
-                        "**Phase 3 — Ask Your Question**\n\n"
-                        "Complete Phase 1 (Compute Chart) first, then optionally "
-                        "complete Phase 2 (Calibrate), then ask any question here.\n\n"
-                        "The prediction uses all computed chart data — D1–D60, dasha, "
-                        "transits, yogas, shadbala — weighted by your calibration."
+                        "Complete Phase 1 first, then ask anything about your chart.\n\n"
+                        "Try: *What does my chart say about career?* or "
+                        "*When is a good time for marriage?*"
                     ),
                 )
+
+                gr.HTML('<div class="gap-sm"></div>')
+
                 with gr.Row(equal_height=True):
                     query_input = gr.Textbox(
-                        label="", placeholder="What does my chart say about…",
+                        label="", placeholder="Ask about career, marriage, wealth, health…",
                         lines=2, scale=5, show_label=False, elem_classes="query-box",
                     )
-                    ask_btn = gr.Button("Ask", variant="primary", scale=1, min_width=72, elem_classes="btn-primary")
+                    ask_btn = gr.Button("↑", variant="primary", scale=1,
+                                       min_width=52, elem_classes="btn-primary ask-btn")
 
                 p3_status = gr.Markdown("", elem_classes="status-line")
-                gr.HTML('<p class="sec-heading" style="margin-top:1.4rem">Classical rules applied</p>')
-                bphs_highlights = gr.HTML('<p style="color:#aeaeb2;font-size:0.82rem;margin:0">Rules appear after each reading.</p>')
 
-                gr.HTML('<div style="height:0.5rem"></div>')
-                clear_btn = gr.Button("Clear", elem_classes="btn-secondary", size="sm")
+                gr.HTML('<div class="gap-sm"></div>')
+                gr.HTML('<p class="sec-heading">📜 Classical rules applied</p>')
+                bphs_highlights = gr.HTML(
+                    '<p style="color:#8E8E93;font-size:0.82rem;margin:0">Rules appear after each reading.</p>'
+                )
+                gr.HTML('<div class="gap-sm"></div>')
+                clear_btn = gr.Button("Clear chat", elem_classes="btn-secondary", size="sm")
 
+            # Options column (full width on mobile, 2/5 on desktop)
             with gr.Column(scale=2, elem_classes="card"):
-                gr.HTML('<p class="sec-heading">Domain options</p>')
+                gr.HTML('<p class="sec-heading">🎯 Domain</p>')
                 domain_sel = gr.Dropdown(
                     choices=["auto", "general", "career", "marriage", "wealth",
                              "health", "spirituality", "children", "travel", "family", "social_standing"],
                     value="auto", label="Life domain",
                     info="'auto' detects from your question",
                 )
-                gr.HTML('<p class="sec-heading" style="margin-top:1.2rem">BPHS rules (full)</p>')
+                gr.HTML('<p class="sec-heading" style="margin-top:1.4rem">📚 BPHS rules (full list)</p>')
                 bphs_panel = gr.Markdown("*—*", elem_classes="panel-md")
 
+        gr.HTML('<div class="gap-md"></div>')
+
         # ── Examples ──────────────────────────────────────────────────────
-        gr.HTML('<div style="height:1.2rem"></div>')
         gr.Examples(
             examples=[
                 [15, 6,  1990, 14, 30, "Mumbai, India",    "", "", ""],

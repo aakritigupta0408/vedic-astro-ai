@@ -457,9 +457,9 @@ class PipelineRunner:
         try:
             from vedic_astro.rules.rule_selector import select_all_rules
             natal_data   = self._serialise_chart(state.chart)
-            dasha_data   = self._serialise_dasha(state.dasha_window)
-            transit_data = self._serialise_transit(state.transit_overlay)
-            yoga_data    = self._serialise_yogas(state.yoga_bundle, state.score)
+            dasha_data   = self._serialise_dasha(state.dasha_window, state.features)
+            transit_data = self._serialise_transit(state.transit_overlay, state.features)
+            yoga_data    = self._serialise_yogas(state.yoga_bundle, state.score, state.features)
             bphs_rules = select_all_rules(natal_data, dasha_data, transit_data, yoga_data, domain)
         except Exception:
             bphs_rules = {}
@@ -526,12 +526,12 @@ class PipelineRunner:
                 retrieved_cases=state.retrieved_cases if step == "natal" else [],
             )
 
-        # Prepare engine data dicts
+        # Prepare engine data dicts (pass features for interdependence data)
         natal_data = self._serialise_chart(state.chart)
-        dasha_data = self._serialise_dasha(state.dasha_window)
-        transit_data = self._serialise_transit(state.transit_overlay)
+        dasha_data = self._serialise_dasha(state.dasha_window, state.features)
+        transit_data = self._serialise_transit(state.transit_overlay, state.features)
         varga_data = self._serialise_vargas(state.varga_charts)
-        yoga_data = self._serialise_yogas(state.yoga_bundle, state.score)
+        yoga_data = self._serialise_yogas(state.yoga_bundle, state.score, state.features)
 
         natal_inp = _make_input("natal", natal_data)
         dasha_inp = _make_input("dasha", dasha_data)
@@ -559,6 +559,8 @@ class PipelineRunner:
         if state.synthesis_raw:
             return
         from vedic_astro.agents.synthesis_agent import SynthesisAgent, SynthesisInput
+        score_summary = state.score.summary if state.score else ""
+        score_table   = state.score.score_table_md if state.score else ""
         inp = SynthesisInput(
             query=state.request.query,
             natal_narrative=state.agent_outputs.get("natal", ""),
@@ -566,6 +568,8 @@ class PipelineRunner:
             transit_narrative=state.agent_outputs.get("transit", ""),
             divisional_narrative=state.agent_outputs.get("divisional", ""),
             retrieved_cases=state.retrieved_cases,
+            score_summary=score_summary,
+            score_table=score_table,
         )
         out = await self._synthesis.run(inp)
         state.synthesis_raw = out.narrative
@@ -659,12 +663,12 @@ class PipelineRunner:
         }
 
     @staticmethod
-    def _serialise_dasha(window) -> dict:
+    def _serialise_dasha(window, features=None) -> dict:
         if window is None:
             return {}
         maha = window.mahadasha
         antar = window.antardasha
-        return {
+        result = {
             "maha_lord":  maha.lord.value,
             "maha_start": str(maha.start),
             "maha_end":   str(maha.end),
@@ -674,9 +678,16 @@ class PipelineRunner:
             "antar_end":   str(antar.end)   if antar else None,
             "antar_elapsed_pct": round(antar.elapsed_fraction(window.query_date) * 100, 1) if antar else None,
         }
+        # Add interdependence data from features if available
+        if features:
+            result["maha_lord_d9_dignity"]   = getattr(features, "maha_lord_d9_dignity", "neutral")
+            result["maha_lord_d10_dignity"]  = getattr(features, "maha_lord_d10_dignity", "neutral")
+            result["dasha_activates_yogas"]  = getattr(features, "dasha_activates_yogas", [])
+            result["antar_activates_yogas"]  = getattr(features, "antar_activates_yogas", [])
+        return result
 
     @staticmethod
-    def _serialise_transit(overlay) -> dict:
+    def _serialise_transit(overlay, features=None) -> dict:
         if overlay is None:
             return {}
         from vedic_astro.engines.natal_engine import RASHI_NAMES
@@ -691,6 +702,11 @@ class PipelineRunner:
                 "composite_strength": round(g.composite_strength, 2),
                 "favorable": g.is_favorable,
             }
+        # Add interdependence data from features if available
+        if features:
+            result["transit_conjunct_dasha_lord"] = getattr(features, "transit_conjunct_dasha_lord", False)
+            result["transit_conjunct_planet"]     = getattr(features, "transit_conjunct_dasha_lord_planet", "")
+            result["transit_activates_yogas"]     = getattr(features, "transit_activates_yogas", [])
         return result
 
     @staticmethod
@@ -710,13 +726,25 @@ class PipelineRunner:
         return out
 
     @staticmethod
-    def _serialise_yogas(bundle, score) -> dict:
+    def _serialise_yogas(bundle, score, features=None) -> dict:
         out: dict = {"yogas": [], "doshas": [], "score_notes": []}
         if bundle:
-            out["yogas"]  = [{"name": y.name, "strength": y.strength} for y in bundle.active_yogas]
+            out["yogas"] = [
+                {
+                    "name": y.name,
+                    "strength": y.strength,
+                    "forming_planets": [p.value for p in y.contributing_planets],
+                    "key_houses": list(y.key_houses),
+                }
+                for y in bundle.active_yogas
+            ]
             out["doshas"] = [{"name": d.name, "severity": d.severity} for d in bundle.active_doshas]
         if score:
             out["score_notes"] = score.notes
+        # Add activation state from features
+        if features:
+            out["dasha_activates"] = getattr(features, "dasha_activates_yogas", [])
+            out["transit_activates"] = getattr(features, "transit_activates_yogas", [])
         return out
 
     @staticmethod

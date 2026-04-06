@@ -190,6 +190,7 @@ class ScoreBreakdown:
     All component scores are in the range [0.0, 1.0].
     ``dosha_penalty`` is a deduction (positive value = penalty applied).
     ``final_score``   is the weighted composite (clamped to [0.0, 1.0]).
+    ``navamsha_strength`` is the D9 sub-score used within natal_strength.
     """
     domain: str
     natal_strength:    float
@@ -199,7 +200,89 @@ class ScoreBreakdown:
     dosha_penalty:     float
     final_score:       float
     interpretation:    str
+    navamsha_strength: float = 0.0   # D9 sub-score (70% D1 + 30% D9 → natal_strength)
+    d1_strength:       float = 0.0   # pure D1 sub-score before D9 blend
+    weights_used:      dict = field(default_factory=dict)  # actual weights used
     notes: list[str] = field(default_factory=list)
+
+    @property
+    def formula(self) -> str:
+        """
+        Human-readable weighted formula string.
+
+        Example:
+            (0.35×0.62 + 0.30×0.71 + 0.25×0.55 + 0.10×0.80) − 0.20×0.30 = 0.634
+        """
+        w = self.weights_used or {
+            "natal": 0.35, "dasha": 0.30, "transit": 0.25, "yoga": 0.10
+        }
+        wn  = w.get("natal",   0.35)
+        wd  = w.get("dasha",   0.30)
+        wt  = w.get("transit", 0.25)
+        wy  = w.get("yoga",    0.10)
+        dp  = self.dosha_penalty
+        return (
+            f"({wn:.2f}×{self.natal_strength:.2f}"
+            f" + {wd:.2f}×{self.dasha_activation:.2f}"
+            f" + {wt:.2f}×{self.transit_trigger:.2f}"
+            f" + {wy:.2f}×{self.yoga_support:.2f})"
+            f" − 0.20×{dp:.2f}"
+            f" = **{self.final_score:.3f}**"
+        )
+
+    @property
+    def score_table_md(self) -> str:
+        """
+        Markdown table showing each component weight, score, and contribution.
+        Suitable for embedding directly in the chat response.
+        """
+        w = self.weights_used or {
+            "natal": 0.35, "dasha": 0.30, "transit": 0.25, "yoga": 0.10
+        }
+        wn  = w.get("natal",   0.35)
+        wd  = w.get("dasha",   0.30)
+        wt  = w.get("transit", 0.25)
+        wy  = w.get("yoga",    0.10)
+
+        rows = [
+            ("Natal Foundation (D1+D9)", f"{wn*100:.0f}%", self.natal_strength,
+             wn * self.natal_strength, "+"),
+            ("Vimshottari Dasha",        f"{wd*100:.0f}%", self.dasha_activation,
+             wd * self.dasha_activation, "+"),
+            ("Gochara Transits",         f"{wt*100:.0f}%", self.transit_trigger,
+             wt * self.transit_trigger, "+"),
+            ("Yoga / Dosha Support",     f"{wy*100:.0f}%", self.yoga_support,
+             wy * self.yoga_support, "+"),
+            ("Dosha Penalty",            "—",              self.dosha_penalty,
+             -0.20 * self.dosha_penalty, "−"),
+        ]
+
+        lines = [
+            "| Layer | Weight | Score | Contribution |",
+            "|-------|--------|-------|-------------|",
+        ]
+        for label, weight, score, contrib, sign in rows:
+            bar_filled = int(round(score * 10))
+            bar = "█" * bar_filled + "░" * (10 - bar_filled)
+            contrib_str = f"{contrib:+.3f}"
+            lines.append(
+                f"| {label} | {weight} | {score:.2f} `{bar}` | {contrib_str} |"
+            )
+        lines.append(
+            f"| **COMPOSITE** | | **{self.final_score:.3f}** | "
+            f"**{self.interpretation.replace('_', ' ').title()}** |"
+        )
+
+        # D9 sub-breakdown if available
+        d9_note = ""
+        if self.d1_strength and self.navamsha_strength:
+            d9_note = (
+                f"\n> Natal = 70% × D1({self.d1_strength:.2f}) "
+                f"+ 30% × D9-Navamsha({self.navamsha_strength:.2f})"
+                f" = {self.natal_strength:.2f}"
+            )
+
+        return "\n".join(lines) + d9_note
 
     @property
     def summary(self) -> str:
@@ -218,6 +301,15 @@ def _interpret(score: float) -> str:
     if score >= 0.40: return "mixed"
     if score >= 0.30: return "challenging"
     return "very_challenging"
+
+
+def _d9_dignity_for_sign(planet: str, sign: int) -> str:
+    """
+    Compute Parashari dignity for *planet* (PlanetName.value string) in *sign* (1–12).
+    Delegates to feature_builder to keep the implementation in one place.
+    """
+    from vedic_astro.learning.feature_builder import _d9_dignity_for_sign as _impl
+    return _impl(planet, sign)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -257,28 +349,32 @@ class WeightedScorer:
         Returns
         -------
         ScoreBreakdown
+            Includes component scores, D9 navamsha sub-score, formula string,
+            and a ready-to-embed Markdown score table.
         """
         domain = domain.lower()
         notes: list[str] = []
 
-        natal   = self._score_natal_strength(features, domain, notes)
+        d1_raw, d9_raw, natal = self._score_natal_strength(features, domain, notes)
         dasha   = self._score_dasha_activation(features, domain, notes)
         transit = self._score_transit_trigger(features, notes)
         yoga    = self._score_yoga_support(features, domain, notes)
         dosha   = self._score_dosha_penalty(features, domain, notes)
 
         w = self._w
-        numerator = (
-            w.natal_weight   * natal
-          + w.dasha_weight   * dasha
-          + w.transit_weight * transit
-          + w.yoga_weight    * yoga
-        )
-        denominator = w.natal_weight + w.dasha_weight + w.transit_weight + w.yoga_weight
+        # Normalise positive weights so they sum to 1
+        pos_total = w.natal_weight + w.dasha_weight + w.transit_weight + w.yoga_weight
+        wn = w.natal_weight   / pos_total if pos_total else 0.35
+        wd = w.dasha_weight   / pos_total if pos_total else 0.30
+        wt = w.transit_weight / pos_total if pos_total else 0.25
+        wy = w.yoga_weight    / pos_total if pos_total else 0.10
 
-        raw_score = numerator / denominator if denominator > 0 else 0.5
-        # Subtract dosha penalty (dosha_penalty already normalised to [0,1])
-        final = max(0.0, min(1.0, raw_score - dosha * 0.20))
+        numerator = wn * natal + wd * dasha + wt * transit + wy * yoga
+        # Subtract dosha penalty as a fixed 20% deduction on the penalty value
+        final = max(0.0, min(1.0, numerator - dosha * 0.20))
+
+        weights_used = {"natal": round(wn, 4), "dasha": round(wd, 4),
+                        "transit": round(wt, 4), "yoga": round(wy, 4)}
 
         return ScoreBreakdown(
             domain=domain,
@@ -289,6 +385,9 @@ class WeightedScorer:
             dosha_penalty=round(dosha, 3),
             final_score=round(final, 3),
             interpretation=_interpret(final),
+            navamsha_strength=round(d9_raw, 3) if d9_raw is not None else 0.0,
+            d1_strength=round(d1_raw, 3),
+            weights_used=weights_used,
             notes=notes,
         )
 
@@ -299,20 +398,28 @@ class WeightedScorer:
         f: AstroFeatures,
         domain: str,
         notes: list[str],
-    ) -> float:
+    ) -> tuple[float, Optional[float], float]:
         """
         Assess natal planet dignity and house placement for the domain.
 
-        Steps:
+        Returns (d1_score, d9_score_or_None, blended_natal_score).
+
+        D1 and D9 are blended: natal = 0.70 × D1 + 0.30 × D9 (when D9 available).
+
+        D1 scoring steps:
         1. Identify key planets and houses for the domain.
         2. Score each key planet: dignity score × house bonus × combust penalty.
         3. Penalise lagna lord if in dusthana.
         4. Average across key planets.
+
+        D9 scoring: compute dignity of the same key planets in D9 sign,
+        apply the same dignity-score lookup, then average.
         """
         key_planets = _DOMAIN_KEY_PLANETS.get(domain) or list(f.planet_signs.keys())
         key_houses  = set(_DOMAIN_KEY_HOUSES.get(domain, [1, 4, 7, 10]))
 
-        scores = []
+        # ── D1 scoring ────────────────────────────────────────────────────
+        d1_scores = []
         for planet in key_planets:
             dignity = f.planet_dignities.get(planet, "neutral")
             house   = f.planet_houses.get(planet, 0)
@@ -337,25 +444,56 @@ class WeightedScorer:
             combust_mult = (1.0 - self._w.combust_penalty) if f.planet_is_combust.get(planet) else 1.0
 
             p_score = min(1.0, d_score * house_mult * combust_mult)
-            scores.append(p_score)
+            d1_scores.append(p_score)
 
             if dignity == "debilitated":
                 notes.append(f"{planet.title()} debilitated — weakens {domain} prospects")
             elif dignity == "exalted" and house in key_houses:
                 notes.append(f"{planet.title()} exalted in house {house} — strong {domain} indicator")
 
-        if not scores:
-            return 0.5
+        d1_raw = sum(d1_scores) / len(d1_scores) if d1_scores else 0.5
 
-        # Lagna lord penalty
+        # Lagna lord penalty on D1 score
         lagna_lord = _get_lagna_lord(f.lagna_sign)
         if lagna_lord:
             ll_house = f.planet_houses.get(lagna_lord, 0)
             if ll_house in _DUSTHANA_HOUSES:
                 notes.append(f"Lagna lord in {ll_house}th (dusthana) — overall constitution weakened")
-                return max(0.0, sum(scores) / len(scores) - 0.08)
+                d1_raw = max(0.0, d1_raw - 0.08)
 
-        return sum(scores) / len(scores)
+        # ── D9 (Navamsha) scoring ─────────────────────────────────────────
+        d9_raw: Optional[float] = None
+        if f.d9_planet_signs:
+            d9_scores = []
+            for planet in key_planets:
+                d9_sign = f.d9_planet_signs.get(planet)
+                if d9_sign:
+                    dig = _d9_dignity_for_sign(planet, d9_sign)
+                    d9_scores.append(DIGNITY_SCORES.get(dig, 0.40))
+            if d9_scores:
+                d9_raw = sum(d9_scores) / len(d9_scores)
+                # Vargottama bonus: planet in same sign in D1 and D9
+                vargottama = [
+                    p for p in key_planets
+                    if f.planet_signs.get(p) and f.planet_signs.get(p) == f.d9_planet_signs.get(p)
+                ]
+                if vargottama:
+                    d9_raw = min(1.0, d9_raw + 0.05 * len(vargottama))
+                    notes.append(
+                        f"Vargottama planet(s): {', '.join(p.title() for p in vargottama[:3])} "
+                        f"(same sign in D1 & D9 — confirmed strength)"
+                    )
+
+        # ── Blend D1 + D9 ─────────────────────────────────────────────────
+        if d9_raw is not None:
+            blended = 0.70 * d1_raw + 0.30 * d9_raw
+            notes.append(
+                f"Natal: D1={d1_raw:.2f}×70% + D9-Navamsha={d9_raw:.2f}×30% = {blended:.2f}"
+            )
+        else:
+            blended = d1_raw
+
+        return d1_raw, d9_raw, blended
 
     def _score_dasha_activation(
         self,
@@ -366,11 +504,15 @@ class WeightedScorer:
         """
         Assess whether the active dasha amplifies the domain.
 
-        Checks:
-        - Maha lord dignity (natal placement quality).
-        - Maha/Antar lord mutual friendship.
-        - Whether dasha lords rule houses relevant to the domain.
-        - Timing (early periods are more potent than ending periods).
+        Checks (in order of importance):
+        1. Maha lord D1 dignity + house placement.
+        2. D9 varga depth of maha lord (how fully promise manifests).
+        3. D10 dignity bonus for career queries.
+        4. Whether dasha lord IS a yoga-forming planet (yoga fructification).
+        5. Maha/Antar lord mutual friendship.
+        6. Whether dasha lords rule domain-key houses.
+        7. Timing fraction.
+        8. Retrograde penalty.
         """
         if not f.maha_lord:
             return 0.5   # no dasha data
@@ -381,12 +523,54 @@ class WeightedScorer:
         maha_score  = DIGNITY_SCORES.get(maha_dignity, 0.40)
         antar_score = DIGNITY_SCORES.get(antar_dignity, 0.40) if f.antar_lord else 0.5
 
-        # Maha lord house placement
+        # Maha lord house placement (D1)
         maha_house = f.maha_lord_house
         if maha_house in _KENDRA_HOUSES | _TRIKONA_HOUSES:
             maha_score = min(1.0, maha_score + 0.12)
         elif maha_house in _DUSTHANA_HOUSES:
             maha_score = max(0.0, maha_score - 0.12)
+
+        # ── NEW: D9 varga depth modifier ─────────────────────────────────
+        # The dasha lord's D9 dignity determines how fully it delivers its D1
+        # promise.  Exalted in D9 → amplified; debilitated → curtailed.
+        d9_dig = getattr(f, "maha_lord_d9_dignity", "neutral")
+        d9_dignity_score = DIGNITY_SCORES.get(d9_dig, 0.40)
+        # Normalise: neutral (0.40) → 1.0, exalted (1.0) → 1.50, debil (0.0) → 0.50
+        d9_varga_mult = 0.50 + d9_dignity_score
+        d9_varga_mult = max(0.60, min(1.40, d9_varga_mult))
+        maha_score = min(1.0, maha_score * d9_varga_mult)
+        if d9_dig in ("exalted", "moolatrikona", "own"):
+            notes.append(
+                f"Dasha lord {f.maha_lord} is {d9_dig} in D9 — promise amplified"
+            )
+        elif d9_dig == "debilitated":
+            notes.append(
+                f"Dasha lord {f.maha_lord} is debilitated in D9 — D1 promise curtailed"
+            )
+
+        # ── NEW: D10 bonus for career domain ─────────────────────────────
+        if domain == "career":
+            d10_dig = getattr(f, "maha_lord_d10_dignity", "neutral")
+            if d10_dig in ("exalted", "moolatrikona", "own"):
+                maha_score = min(1.0, maha_score + 0.08)
+                notes.append(
+                    f"Dasha lord {f.maha_lord} is {d10_dig} in D10 — career delivery confirmed"
+                )
+
+        # ── NEW: Yoga fructification by dasha ────────────────────────────
+        # If the maha lord IS one of the yoga-forming planets, the yoga is
+        # being directly activated by the dasha — strong bonus.
+        activated_yogas = getattr(f, "dasha_activates_yogas", [])
+        yoga_fruct_bonus = 0.0
+        if activated_yogas:
+            yoga_fruct_bonus = min(0.15, 0.08 * len(activated_yogas))
+            notes.append(
+                f"Dasha lord activates yoga(s): {', '.join(activated_yogas[:3])} "
+                f"— yoga fructifying now"
+            )
+        antar_activated = getattr(f, "antar_activates_yogas", [])
+        if antar_activated:
+            yoga_fruct_bonus = min(0.15, yoga_fruct_bonus + 0.04 * len(antar_activated))
 
         # Friendship bonus
         friendship_mult = 1.08 if f.dasha_lords_are_friends else 1.0
@@ -407,15 +591,15 @@ class WeightedScorer:
         maha_retro = f.planet_is_retrograde.get(f.maha_lord, False)
         retro_pen = self._w.retrograde_penalty if maha_retro else 0.0
 
-        # Timing: dasha early vs late (very late dashas may feel like tail-off)
+        # Timing: dasha early vs late
         timing_mult = 1.0
         if f.maha_elapsed_fraction < 0.2:
-            timing_mult = 1.05  # just beginning — more potent
+            timing_mult = 1.05
         elif f.maha_elapsed_fraction > 0.85:
-            timing_mult = 0.95  # near end
+            timing_mult = 0.95
 
         score = (0.60 * maha_score + 0.40 * antar_score) * friendship_mult * timing_mult
-        score = min(1.0, score + domain_bonus - retro_pen)
+        score = min(1.0, score + domain_bonus + yoga_fruct_bonus - retro_pen)
         return max(0.0, score)
 
     def _score_transit_trigger(
@@ -427,7 +611,13 @@ class WeightedScorer:
         Compute weighted gochara (transit) trigger score.
 
         Weights outer planets more heavily (Saturn/Jupiter/Rahu/Ketu).
-        Applies Sade Sati penalty when active.
+
+        NEW interdependence checks:
+        1. Dasha-transit confluence: transiting planet conjunct natal dasha lord
+           (the same planetary energy running in both timing systems → amplified).
+        2. Transit-yoga activation: transit over a yoga-forming planet's natal
+           position "switches on" the yoga for immediate fructification.
+        3. Applies Sade Sati penalty when active.
         """
         if not f.gochara_strengths:
             return 0.5
@@ -453,6 +643,27 @@ class WeightedScorer:
         if jup_fav:
             base = min(1.0, base + 0.05)
 
+        # ── NEW: Dasha-transit confluence ─────────────────────────────────
+        # Transit planet conjunct natal dasha lord = double activation
+        if getattr(f, "transit_conjunct_dasha_lord", False):
+            conj_p = getattr(f, "transit_conjunct_dasha_lord_planet", "transit planet")
+            base = min(1.0, base + 0.12)
+            notes.append(
+                f"Dasha-transit confluence: {conj_p} transiting over natal "
+                f"dasha lord {f.maha_lord} — double activation of timing"
+            )
+
+        # ── NEW: Transit-yoga activation ──────────────────────────────────
+        # Transit over yoga-forming planet's natal position activates the yoga
+        activated_yogas = getattr(f, "transit_activates_yogas", [])
+        if activated_yogas:
+            transit_yoga_bonus = min(0.10, 0.05 * len(activated_yogas))
+            base = min(1.0, base + transit_yoga_bonus)
+            notes.append(
+                f"Transit activating yoga(s): {', '.join(activated_yogas[:3])} "
+                f"— timing window for yoga results"
+            )
+
         return base
 
     def _score_yoga_support(
@@ -462,7 +673,16 @@ class WeightedScorer:
         notes: list[str],
     ) -> float:
         """
-        Score active yogas filtered to those relevant for the domain.
+        Score active yogas accounting for their ACTUAL ACTIVATION STATE.
+
+        A natal yoga that is not being activated by the current dasha or
+        transit is dormant and should contribute less to the score.
+
+        Activation tiers:
+        - Dasha + transit both activate the yoga → 1.25× strength (double trigger)
+        - Dasha alone activates → 1.0× (fully fructifying)
+        - Transit alone activates → 0.85× (partially triggered)
+        - Neither activates → 0.55× (natally present but dormant)
 
         Doshas are scored separately (see _score_dosha_penalty).
         """
@@ -473,7 +693,6 @@ class WeightedScorer:
 
         relevant_names = []
         if relevant:
-            # Score only domain-relevant yogas
             relevant_names = [
                 y for y in f.active_yoga_names
                 if any(r.lower() in y.lower() for r in relevant)
@@ -485,16 +704,48 @@ class WeightedScorer:
         if not all_names:
             return 0.40
 
-        strengths = [f.yoga_strengths.get(y, 0.5) for y in all_names]
-        avg = sum(strengths) / len(strengths)
+        dasha_acts   = set(getattr(f, "dasha_activates_yogas", []))
+        transit_acts = set(getattr(f, "transit_activates_yogas", []))
 
-        # Bonus if ≥2 yogas present
-        count_bonus = min(0.10, len(strengths) * 0.03)
+        effective_strengths = []
+        fully_active = []
+        dormant = []
 
+        for yoga_name in all_names:
+            base_strength = f.yoga_strengths.get(yoga_name, 0.5)
+            d_active = yoga_name in dasha_acts
+            t_active = yoga_name in transit_acts
+
+            if d_active and t_active:
+                mult = 1.25    # double trigger — yoga is at peak expression
+                fully_active.append(yoga_name)
+            elif d_active:
+                mult = 1.00    # dasha alone — normal fructification
+                fully_active.append(yoga_name)
+            elif t_active:
+                mult = 0.85    # transit alone — partially triggered
+            else:
+                mult = 0.55    # dormant — natal promise only, not yet operative
+                dormant.append(yoga_name)
+
+            effective_strengths.append(min(1.0, base_strength * mult))
+
+        avg = sum(effective_strengths) / len(effective_strengths)
+        count_bonus = min(0.10, len(effective_strengths) * 0.03)
         score = min(1.0, avg + count_bonus)
+
+        if fully_active:
+            notes.append(
+                f"Active (dasha-fructifying) yoga(s): {', '.join(fully_active[:3])}"
+            )
+        if dormant:
+            notes.append(
+                f"Dormant yoga(s) — natal promise, not yet triggered by dasha/transit: "
+                f"{', '.join(dormant[:3])}"
+            )
         if relevant_names:
             notes.append(
-                f"{len(relevant_names)} domain-relevant yoga(s): {', '.join(relevant_names[:3])}"
+                f"{len(relevant_names)} domain-relevant yoga(s) for {domain}"
             )
         return score
 
