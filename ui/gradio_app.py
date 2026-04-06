@@ -251,6 +251,86 @@ CITIES: list[str] = [
 
 CITIES_SORTED = sorted(set(CITIES))
 
+# ─────────────────────────────────────────────────────────────────────────────
+# City → (lat, lon) lookup  — fills UI fields instantly on city select
+# Falls through to pipeline geocoder for anything not listed here
+# ─────────────────────────────────────────────────────────────────────────────
+CITY_COORDS: dict[str, tuple[float, float]] = {
+    # India — major
+    "Mumbai, India": (19.0760, 72.8777), "Delhi, India": (28.6139, 77.2090),
+    "New Delhi, India": (28.6139, 77.2090), "Bengaluru, India": (12.9716, 77.5946),
+    "Bangalore, India": (12.9716, 77.5946), "Chennai, India": (13.0827, 80.2707),
+    "Kolkata, India": (22.5726, 88.3639), "Hyderabad, India": (17.3850, 78.4867),
+    "Pune, India": (18.5204, 73.8567), "Ahmedabad, India": (23.0225, 72.5714),
+    "Surat, India": (21.1702, 72.8311), "Jaipur, India": (26.9124, 75.7873),
+    "Lucknow, India": (26.8467, 80.9462), "Kanpur, India": (26.4499, 80.3319),
+    "Nagpur, India": (21.1458, 79.0882), "Indore, India": (22.7196, 75.8577),
+    "Bhopal, India": (23.2599, 77.4126), "Patna, India": (25.5941, 85.1376),
+    "Varanasi, India": (25.3176, 82.9739), "Agra, India": (27.1767, 78.0081),
+    "Srinagar, India": (34.0837, 74.7973), "Amritsar, India": (31.6340, 74.8723),
+    "Chandigarh, India": (30.7333, 76.7794), "Coimbatore, India": (11.0168, 76.9558),
+    "Kochi, India": (9.9312, 76.2673), "Mysuru, India": (12.2958, 76.6394),
+    "Mysore, India": (12.2958, 76.6394), "Visakhapatnam, India": (17.6868, 83.2185),
+    "Thiruvananthapuram, India": (8.5241, 76.9366), "Guwahati, India": (26.1445, 91.7362),
+    "Bhubaneswar, India": (20.2961, 85.8245), "Raipur, India": (21.2514, 81.6296),
+    "Vadodara, India": (22.3072, 73.1812), "Rajkot, India": (22.3039, 70.8022),
+    "Tirupati, India": (13.6288, 79.4192), "Madurai, India": (9.9252, 78.1198),
+    "Ludhiana, India": (30.9010, 75.8573), "Faridabad, India": (28.4089, 77.3178),
+    "Gurugram, India": (28.4595, 77.0266), "Gurgaon, India": (28.4595, 77.0266),
+    "Noida, India": (28.5355, 77.3910), "Navi Mumbai, India": (19.0368, 73.0158),
+    "Meerut, India": (28.9845, 77.7064), "Prayagraj, India": (25.4358, 81.8463),
+    "Allahabad, India": (25.4358, 81.8463), "Gorakhpur, India": (26.7606, 83.3732),
+    "Jodhpur, India": (26.2389, 73.0243), "Kota, India": (25.2138, 75.8648),
+    "Udaipur, India": (24.5854, 73.7125), "Jabalpur, India": (23.1815, 79.9864),
+    "Gwalior, India": (26.2183, 78.1828), "Ujjain, India": (23.1765, 75.7885),
+    # Global
+    "London, UK": (51.5074, -0.1278), "New York, USA": (40.7128, -74.0060),
+    "Los Angeles, USA": (34.0522, -118.2437), "Chicago, USA": (41.8781, -87.6298),
+    "Toronto, Canada": (43.6532, -79.3832), "Vancouver, Canada": (49.2827, -123.1207),
+    "Sydney, Australia": (-33.8688, 151.2093), "Melbourne, Australia": (-37.8136, 144.9631),
+    "Singapore": (1.3521, 103.8198), "Dubai, UAE": (25.2048, 55.2708),
+    "Abu Dhabi, UAE": (24.4539, 54.3773), "Kuala Lumpur, Malaysia": (3.1390, 101.6869),
+    "Bangkok, Thailand": (13.7563, 100.5018), "Tokyo, Japan": (35.6762, 139.6503),
+    "Beijing, China": (39.9042, 116.4074), "Shanghai, China": (31.2304, 121.4737),
+    "Hong Kong": (22.3193, 114.1694), "Seoul, South Korea": (37.5665, 126.9780),
+    "Jakarta, Indonesia": (-6.2088, 106.8456), "Manila, Philippines": (14.5995, 120.9842),
+    "Karachi, Pakistan": (24.8607, 67.0011), "Lahore, Pakistan": (31.5204, 74.3587),
+    "Dhaka, Bangladesh": (23.8103, 90.4125), "Colombo, Sri Lanka": (6.9271, 79.8612),
+    "Kathmandu, Nepal": (27.7172, 85.3240), "Kabul, Afghanistan": (34.5553, 69.2075),
+    "Berlin, Germany": (52.5200, 13.4050), "Paris, France": (48.8566, 2.3522),
+    "Amsterdam, Netherlands": (52.3676, 4.9041), "Brussels, Belgium": (50.8503, 4.3517),
+    "Madrid, Spain": (40.4168, -3.7038), "Barcelona, Spain": (41.3851, 2.1734),
+    "Rome, Italy": (41.9028, 12.4964), "Milan, Italy": (45.4642, 9.1900),
+    "Zurich, Switzerland": (47.3769, 8.5417), "Vienna, Austria": (48.2082, 16.3738),
+    "Stockholm, Sweden": (59.3293, 18.0686), "Oslo, Norway": (59.9139, 10.7522),
+    "Copenhagen, Denmark": (55.6761, 12.5683), "Helsinki, Finland": (60.1699, 24.9384),
+    "Moscow, Russia": (55.7558, 37.6176), "Istanbul, Turkey": (41.0082, 28.9784),
+    "Cairo, Egypt": (30.0444, 31.2357), "Lagos, Nigeria": (6.5244, 3.3792),
+    "Nairobi, Kenya": (-1.2921, 36.8219), "Johannesburg, South Africa": (-26.2041, 28.0473),
+    "Cape Town, South Africa": (-33.9249, 18.4241),
+    "São Paulo, Brazil": (-23.5505, -46.6333), "Rio de Janeiro, Brazil": (-22.9068, -43.1729),
+    "Buenos Aires, Argentina": (-34.6037, -58.3816), "Lima, Peru": (-12.0464, -77.0428),
+    "Mexico City, Mexico": (19.4326, -99.1332), "San Francisco, USA": (37.7749, -122.4194),
+    "Seattle, USA": (47.6062, -122.3321), "Boston, USA": (42.3601, -71.0589),
+    "Miami, USA": (25.7617, -80.1918), "Dallas, USA": (32.7767, -96.7970),
+    "Houston, USA": (29.7604, -95.3698), "Atlanta, USA": (33.7490, -84.3880),
+}
+
+
+def fill_coords(place_str: str) -> tuple[str, str]:
+    """Return (lat_str, lon_str) for a recognised city, or ('', '') otherwise."""
+    if not place_str:
+        return "", ""
+    key = place_str.strip()
+    coords = CITY_COORDS.get(key)
+    if coords is None:
+        # case-insensitive fallback
+        kl = key.lower()
+        coords = next((v for k, v in CITY_COORDS.items() if k.lower() == kl), None)
+    if coords:
+        return f"{coords[0]:.4f}", f"{coords[1]:.4f}"
+    return "", ""   # pipeline will geocode during computation
+
 
 def search_places(query: str) -> list[str]:
     if not query or len(query.strip()) < 2:
@@ -270,6 +350,53 @@ CSS = """
    Vedic Astrology AI — Apple iOS-inspired mobile-first UI v0.2.0
    Design language: iOS 17 / visionOS human interface guidelines
    ═══════════════════════════════════════════════════════════════ */
+
+/* ── Keyframe animations ──────────────────────────────────────── */
+@keyframes twinkle {
+    0%, 100% { opacity: 0.15; transform: scale(0.7); }
+    50%       { opacity: 0.9;  transform: scale(1.2); }
+}
+@keyframes twinkle-slow {
+    0%, 100% { opacity: 0.08; transform: scale(0.8); }
+    60%       { opacity: 0.6;  transform: scale(1.1); }
+}
+@keyframes zodiac-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+@keyframes zodiac-spin-rev {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(-360deg); }
+}
+@keyframes orbit-dot {
+    from { transform: rotate(0deg) translateX(22px) rotate(0deg); }
+    to   { transform: rotate(360deg) translateX(22px) rotate(-360deg); }
+}
+@keyframes orbit-dot-fast {
+    from { transform: rotate(0deg) translateX(14px) rotate(0deg); }
+    to   { transform: rotate(360deg) translateX(14px) rotate(-360deg); }
+}
+@keyframes shimmer-bar {
+    0%   { background-position: -300% center; }
+    100% { background-position: 300% center; }
+}
+@keyframes glow-pulse {
+    0%, 100% { box-shadow: 0 2px 12px rgba(0,122,255,0.30); }
+    50%       { box-shadow: 0 2px 22px rgba(0,122,255,0.55), 0 0 0 3px rgba(0,122,255,0.12); }
+}
+@keyframes card-appear {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes hdr-gradient {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+@keyframes float-symbol {
+    0%, 100% { transform: translateY(0px); }
+    50%       { transform: translateY(-4px); }
+}
 
 /* ── Reset & base ─────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -310,26 +437,116 @@ body, .gradio-container {
 /* ── Header ───────────────────────────────────────────────────── */
 .hdr {
     text-align: center;
-    padding: 2rem 1.2rem 0.8rem;
-    background: linear-gradient(180deg, #fff 0%, #F2F2F7 100%);
-    border-bottom: 0.5px solid rgba(60,60,67,0.10);
+    padding: 2.2rem 1.2rem 1rem;
+    position: relative; overflow: hidden;
+    background: linear-gradient(135deg, #0f0c29, #302b63, #1a1a2e, #16213e, #0f3460);
+    background-size: 400% 400%;
+    animation: hdr-gradient 18s ease infinite;
+    border-bottom: none;
 }
 .hdr h1 {
     font-size: 1.9rem; font-weight: 700;
-    letter-spacing: -0.035em; color: #1C1C1E;
-    margin: 0 0 0.3rem; line-height: 1.1;
-    background: linear-gradient(135deg, #1C1C1E 0%, #3a3a3c 100%);
+    letter-spacing: -0.035em;
+    margin: 0 0 0.35rem; line-height: 1.1;
+    background: linear-gradient(135deg, #e8d5b7 0%, #f9f3e3 40%, #c9a96e 70%, #e8d5b7 100%);
+    background-size: 200% auto;
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    animation: shimmer-bar 6s linear infinite;
 }
 .hdr p {
-    font-size: 0.82rem; color: #8E8E93;
-    margin: 0; letter-spacing: -0.005em;
+    font-size: 0.82rem; color: rgba(255,255,255,0.55);
+    margin: 0; letter-spacing: 0.01em;
     line-height: 1.5;
 }
 @media (min-width: 768px) {
     .hdr h1 { font-size: 2.6rem; }
     .hdr p  { font-size: 0.95rem; }
 }
+
+/* Star field inside header */
+.hdr-star {
+    position: absolute; border-radius: 50%;
+    background: #fff; pointer-events: none;
+}
+.hdr-star.s1  { width:2px; height:2px; top:15%; left:8%;  animation: twinkle 2.1s 0.0s infinite; }
+.hdr-star.s2  { width:3px; height:3px; top:25%; left:18%; animation: twinkle 3.3s 0.4s infinite; }
+.hdr-star.s3  { width:2px; height:2px; top:10%; left:32%; animation: twinkle 2.7s 1.1s infinite; }
+.hdr-star.s4  { width:2px; height:2px; top:40%; left:55%; animation: twinkle-slow 4.1s 0.8s infinite; }
+.hdr-star.s5  { width:3px; height:3px; top:20%; left:70%; animation: twinkle 2.4s 0.2s infinite; }
+.hdr-star.s6  { width:2px; height:2px; top:35%; left:82%; animation: twinkle 3.8s 1.5s infinite; }
+.hdr-star.s7  { width:2px; height:2px; top:50%; left:91%; animation: twinkle-slow 5.0s 0.6s infinite; }
+.hdr-star.s8  { width:3px; height:3px; top:60%; left:6%;  animation: twinkle 2.9s 1.9s infinite; }
+.hdr-star.s9  { width:2px; height:2px; top:70%; left:42%; animation: twinkle 3.5s 0.3s infinite; }
+.hdr-star.s10 { width:2px; height:2px; top:75%; left:65%; animation: twinkle-slow 4.6s 1.2s infinite; }
+.hdr-star.s11 { width:3px; height:3px; top:12%; left:48%; animation: twinkle 2.2s 0.7s infinite; }
+.hdr-star.s12 { width:2px; height:2px; top:55%; left:28%; animation: twinkle 3.1s 2.0s infinite; }
+
+/* Zodiac ring wrapper */
+.zodiac-ring-wrap {
+    position: relative; display: inline-flex;
+    align-items: center; justify-content: center;
+    width: 72px; height: 72px; margin: 0 auto 0.6rem;
+}
+.zodiac-ring {
+    position: absolute; width: 100%; height: 100%;
+    animation: zodiac-spin 60s linear infinite;
+}
+.zodiac-ring span {
+    position: absolute; top: 50%; left: 50%;
+    font-size: 0.7rem; opacity: 0.7;
+    transform-origin: 0 0;
+    color: rgba(232,213,183,0.85);
+}
+/* Place each symbol around a 34px radius circle */
+.zodiac-ring .z0  { transform: rotate(  0deg) translate(34px,-50%); }
+.zodiac-ring .z1  { transform: rotate( 30deg) translate(34px,-50%); }
+.zodiac-ring .z2  { transform: rotate( 60deg) translate(34px,-50%); }
+.zodiac-ring .z3  { transform: rotate( 90deg) translate(34px,-50%); }
+.zodiac-ring .z4  { transform: rotate(120deg) translate(34px,-50%); }
+.zodiac-ring .z5  { transform: rotate(150deg) translate(34px,-50%); }
+.zodiac-ring .z6  { transform: rotate(180deg) translate(34px,-50%); }
+.zodiac-ring .z7  { transform: rotate(210deg) translate(34px,-50%); }
+.zodiac-ring .z8  { transform: rotate(240deg) translate(34px,-50%); }
+.zodiac-ring .z9  { transform: rotate(270deg) translate(34px,-50%); }
+.zodiac-ring .z10 { transform: rotate(300deg) translate(34px,-50%); }
+.zodiac-ring .z11 { transform: rotate(330deg) translate(34px,-50%); }
+/* Central glyph */
+.zodiac-center {
+    font-size: 1.6rem; z-index: 1;
+    animation: float-symbol 4s ease-in-out infinite;
+    color: rgba(232,213,183,0.95);
+    text-shadow: 0 0 12px rgba(232,213,183,0.6);
+}
+
+/* Orbiting planet dots near compute button */
+.orbit-wrap {
+    position: relative; display: inline-block;
+    width: 100%; text-align: center;
+}
+.orbit-dot {
+    position: absolute; top: 50%; left: 50%;
+    width: 6px; height: 6px; border-radius: 50%;
+    margin: -3px; background: #007AFF;
+    animation: orbit-dot 3s linear infinite;
+}
+.orbit-dot.d2 {
+    background: #FF9F0A;
+    animation: orbit-dot 5s linear infinite reverse;
+    width: 5px; height: 5px;
+}
+
+/* Card entrance animation */
+.card, .p3-card {
+    animation: card-appear 0.4s ease both;
+}
+
+/* Phase stepper planet symbols */
+.planet-glyph {
+    font-size: 1rem; display: inline-block;
+    animation: float-symbol 3.5s ease-in-out infinite;
+}
+.step.active .planet-glyph { color: #007AFF; }
+.step.done   .planet-glyph { color: #30D158; }
 
 /* ── Phase stepper — iOS segmented control style ─────────────── */
 .stepper {
@@ -788,6 +1005,24 @@ input[type=number]:focus, input[type=text]:focus, textarea:focus, select:focus {
     padding: 0.5rem 0;
 }
 
+/* ── Animated send button pulse ──────────────────────────────── */
+.send-btn { animation: glow-pulse 2.8s ease-in-out infinite; }
+
+/* ── Score bar shimmer ────────────────────────────────────────── */
+.score-tbl tr:last-child td {
+    background: linear-gradient(90deg, #f0f4ff 0%, #d6e4ff 50%, #f0f4ff 100%);
+    background-size: 200% auto;
+    animation: shimmer-bar 3s linear infinite;
+}
+
+/* ── Planet symbol in sec labels ─────────────────────────────── */
+.planet-sec {
+    font-size: 0.7rem; color: #007AFF;
+    margin-right: 0.3rem; vertical-align: middle;
+    animation: float-symbol 4s ease-in-out infinite;
+    display: inline-block;
+}
+
 /* ── Hide Gradio chrome ───────────────────────────────────────── */
 footer, .built-with, #footer, .svelte-1ipelgc { display: none !important; }
 .gr-prose p:last-child { margin-bottom: 0; }
@@ -1220,13 +1455,34 @@ def build_demo() -> gr.Blocks:
         # ── Header ────────────────────────────────────────────────────────
         gr.HTML("""
         <div class="hdr">
-          <h1>✦ Vedic Astrology AI</h1>
+          <!-- star field -->
+          <span class="hdr-star s1"></span><span class="hdr-star s2"></span>
+          <span class="hdr-star s3"></span><span class="hdr-star s4"></span>
+          <span class="hdr-star s5"></span><span class="hdr-star s6"></span>
+          <span class="hdr-star s7"></span><span class="hdr-star s8"></span>
+          <span class="hdr-star s9"></span><span class="hdr-star s10"></span>
+          <span class="hdr-star s11"></span><span class="hdr-star s12"></span>
+
+          <!-- rotating zodiac ring -->
+          <div class="zodiac-ring-wrap">
+            <div class="zodiac-ring">
+              <span class="z0">♈</span><span class="z1">♉</span>
+              <span class="z2">♊</span><span class="z3">♋</span>
+              <span class="z4">♌</span><span class="z5">♍</span>
+              <span class="z6">♎</span><span class="z7">♏</span>
+              <span class="z8">♐</span><span class="z9">♑</span>
+              <span class="z10">♒</span><span class="z11">♓</span>
+            </div>
+            <span class="zodiac-center">☉</span>
+          </div>
+
+          <h1>Vedic Astrology AI</h1>
           <p>Classical Parashari · Swiss Ephemeris · D1–D60 · Shadbala · BPHS rules · Multi-agent AI</p>
         </div>
         <div class="stepper">
-          <div class="step active" id="step1"><span class="step-num">1</span> Chart</div>
-          <div class="step" id="step2"><span class="step-num">2</span> Calibrate</div>
-          <div class="step" id="step3"><span class="step-num">3</span> Ask</div>
+          <div class="step active" id="step1"><span class="planet-glyph">☉</span> Chart</div>
+          <div class="step" id="step2"><span class="planet-glyph">♎</span> Calibrate</div>
+          <div class="step" id="step3"><span class="planet-glyph">☿</span> Ask</div>
         </div>
         """)
 
@@ -1237,18 +1493,18 @@ def build_demo() -> gr.Blocks:
 
             # Left: birth form
             with gr.Column(scale=1, min_width=240, elem_classes="card"):
-                gr.HTML('<span class="sec-label">Date of birth</span>')
+                gr.HTML('<span class="sec-label"><span class="planet-sec">♋</span>Date of birth</span>')
                 with gr.Row():
                     day   = gr.Number(label="Day",   value=15,   precision=0, minimum=1,   maximum=31,   scale=1)
                     month = gr.Number(label="Month", value=6,    precision=0, minimum=1,   maximum=12,   scale=1)
                     year  = gr.Number(label="Year",  value=1990, precision=0, minimum=1800, maximum=2100, scale=2)
 
-                gr.HTML('<span class="sec-label">Time of birth</span>')
+                gr.HTML('<span class="sec-label"><span class="planet-sec">☽</span>Time of birth</span>')
                 with gr.Row():
                     hour   = gr.Number(label="Hour (0–23)", value=14, precision=0, minimum=0, maximum=23, scale=1)
                     minute = gr.Number(label="Minute",      value=30, precision=0, minimum=0, maximum=59, scale=1)
 
-                gr.HTML('<span class="sec-label">Place of birth</span>')
+                gr.HTML('<span class="sec-label"><span class="planet-sec">♁</span>Place of birth</span>')
                 place = gr.Dropdown(
                     choices=CITIES_SORTED[:20], value=None,
                     allow_custom_value=True, label="City, Country",
@@ -1258,7 +1514,7 @@ def build_demo() -> gr.Blocks:
                     lat_str = gr.Textbox(label="Latitude",  placeholder="19.076", scale=1)
                     lon_str = gr.Textbox(label="Longitude", placeholder="72.877", scale=1)
 
-                gr.HTML('<span class="sec-label" style="margin-top:1.2rem">Transit date</span>')
+                gr.HTML('<span class="sec-label" style="margin-top:1.2rem"><span class="planet-sec">♄</span>Transit date</span>')
                 query_date_str = gr.Textbox(label="Date", placeholder="YYYY-MM-DD  (blank = today)", show_label=False)
 
                 gr.HTML('<div style="margin-top:1.2rem"></div>')
@@ -1289,7 +1545,7 @@ def build_demo() -> gr.Blocks:
         # ══════════════════════════════════════════════════════════════════
         # PHASE 2 — Calibration
         # ══════════════════════════════════════════════════════════════════
-        with gr.Accordion("⚖️  Phase 2 — Calibrate Weights (optional)", open=False):
+        with gr.Accordion("♎  Phase 2 — Calibrate Weights (optional)", open=False):
             gr.Markdown(
                 "Answer questions about past life events. "
                 "Your answers calibrate how much weight each astrological factor gets.\n\n"
@@ -1325,7 +1581,7 @@ def build_demo() -> gr.Blocks:
         gr.HTML('''
         <div class="p3-header">
           <div>
-            <div class="p3-title">💬 Ask your chart</div>
+            <div class="p3-title"><span style="color:#007AFF">☿</span> Ask your chart</div>
             <div class="p3-subtitle">Powered by multi-agent Vedic AI</div>
           </div>
         </div>
@@ -1369,7 +1625,7 @@ def build_demo() -> gr.Blocks:
         # Classical rules
         gr.HTML('''
         <div class="rules-header">
-          <span class="rules-dot"></span>
+          <span style="font-size:0.78rem;color:#8E8E93;opacity:0.7">☊</span>
           <span class="rules-header-text">Classical rules applied</span>
         </div>
         ''')
@@ -1380,7 +1636,7 @@ def build_demo() -> gr.Blocks:
         gr.HTML('</div>')   # ← close wrapper card
 
         # BPHS full list — collapsible below
-        with gr.Accordion("📚 Full BPHS rules", open=False):
+        with gr.Accordion("☊  Full BPHS Classical Rules", open=False):
             bphs_panel = gr.Markdown("*—*", elem_classes="panel-md")
 
         gr.HTML('<div class="gap-md"></div>')
@@ -1402,10 +1658,15 @@ def build_demo() -> gr.Blocks:
 
         # ── Wire events ───────────────────────────────────────────────────
 
-        # Place autocomplete
+        # Place autocomplete (typing)
         place.input(
             fn=lambda q: gr.Dropdown(choices=search_places(q) if q else CITIES_SORTED[:20]),
             inputs=[place], outputs=[place],
+        )
+        # Auto-fill lat/lon when a city is selected or changed
+        place.change(
+            fn=fill_coords,
+            inputs=[place], outputs=[lat_str, lon_str],
         )
 
         # Phase 1
