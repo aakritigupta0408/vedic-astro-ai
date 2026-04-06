@@ -11,25 +11,37 @@ from __future__ import annotations
 from typing import Any
 
 from vedic_astro.rules.bphs_rules import (
+    ADDITIONAL_YOGA_RULES,
+    ANTARDASHA_RULES,
+    ANTARDASHA_RULES_FULL,
     ASPECT_RULES,
     ASHTAKAVARGA_RULES,
+    DASHA_HOUSE_LORD_EFFECTS,
     DASHA_LORD_RULES,
-    ANTARDASHA_RULES,
     DEBILITATION_SIGN,
     DIGNITY_RULES,
     DOMAIN_RULES,
     EXALTATION_SIGN,
+    GOCHARA_PLANET_IN_HOUSE,
+    GRAHA_DRISHTI_RULES,
     HOUSE_LORD_IN_HOUSE,
     HOUSE_SIGNIFICATIONS,
+    JAIMINI_RULES,
+    KALA_SARPA_YOGA_RULES,
     KARAKA_RULES,
     LAGNA_RESULTS,
+    MANGAL_DOSHA_RULES,
     MOOLATRIKONA,
     MUHURTA_RULES,
+    NABHASA_YOGA_RULES,
+    NAKSHATRA_RULES,
     NAVAMSHA_RULES,
     NEECHA_BHANGA_RULES,
     OWN_SIGNS,
     PLANET_IN_HOUSE,
     PLANET_IN_SIGN,
+    PLANETARY_KARAKATWAS,
+    SANYASA_YOGA_RULES,
     SPECIAL_LAGNAS,
     TRANSIT_RULES,
     VIMSHOPAKA_RULES,
@@ -129,7 +141,29 @@ def select_natal_rules(chart_data: dict[str, Any], domain: str, top_k: int = 8) 
             f"House {h} ({info['name']}): governs {', '.join(info['governs'][:4])}. Karaka: {info['karaka']}."
         )
 
-    # 6. Ashtakavarga reminder
+    # 6. Nakshatra of Moon and Lagna lord
+    moon_nakshatra = chart_data.get("moon_nakshatra")
+    if moon_nakshatra and moon_nakshatra in NAKSHATRA_RULES:
+        nak = NAKSHATRA_RULES[moon_nakshatra]
+        rules.append(
+            f"Moon nakshatra {moon_nakshatra} (lord: {nak['lord']}, nature: {nak['nature']}): "
+            f"deity {nak['deity']}, symbol {nak['symbol']}."
+        )
+
+    # 7. Planetary karakattwa for query-relevant planets
+    for planet in list(positions.keys())[:3]:
+        pk = PLANETARY_KARAKATWAS.get(planet)
+        if pk:
+            rules.append(f"{planet} karaka: {pk['primary'][:100]}")
+
+    # 8. Graha drishti for key planets
+    for planet in ("Saturn", "Jupiter", "Mars"):
+        gd = GRAHA_DRISHTI_RULES.get(planet)
+        if gd and "special_aspects" in gd:
+            sa = ", ".join(str(h) for h in gd["special_aspects"])
+            rules.append(f"{planet} special aspects: {sa}th house(s) from its position.")
+
+    # 9. Ashtakavarga reminder
     rules.append(ASHTAKAVARGA_RULES[0])
 
     return _deduplicate(rules)[:top_k]
@@ -145,10 +179,27 @@ def select_dasha_rules(dasha_data: dict[str, Any], domain: str, top_k: int = 6) 
     if maha and maha in DASHA_LORD_RULES:
         rules.append(DASHA_LORD_RULES[maha])
 
-    if antar and maha in ANTARDASHA_RULES:
+    # Use ANTARDASHA_RULES_FULL (full 9×9 matrix) first, fall back to legacy ANTARDASHA_RULES
+    if antar and maha in ANTARDASHA_RULES_FULL:
+        sub_full = ANTARDASHA_RULES_FULL[maha].get(antar)
+        if sub_full:
+            fav = "; ".join(sub_full.get("favorable", [])[:2])
+            unfav = "; ".join(sub_full.get("unfavorable", [])[:1])
+            rules.append(f"{maha}-{antar} antardasha (favorable): {fav}")
+            if unfav:
+                rules.append(f"{maha}-{antar} antardasha (challenges): {unfav}")
+    elif antar and maha in ANTARDASHA_RULES:
         sub = ANTARDASHA_RULES[maha].get(antar)
         if sub:
             rules.append(f"{maha}-{antar} antardasha: {sub}")
+
+    # House lord dasha effects
+    maha_house_lord = dasha_data.get("maha_lord_house_ruled")
+    if maha_house_lord and int(maha_house_lord) in DASHA_HOUSE_LORD_EFFECTS:
+        eff = DASHA_HOUSE_LORD_EFFECTS[int(maha_house_lord)]
+        fav = "; ".join(eff.get("favorable", [])[:1])
+        if fav:
+            rules.append(f"Dasha of {maha_house_lord}th lord: {fav}")
 
     rules.append(
         "The Mahadasha lord's natal house, sign dignity, and house rulership determine the flavour of the dasha period. "
@@ -177,7 +228,7 @@ def select_dasha_rules(dasha_data: dict[str, Any], domain: str, top_k: int = 6) 
     return _deduplicate(rules)[:top_k]
 
 
-def select_transit_rules(transit_data: dict[str, Any], domain: str, top_k: int = 5) -> list[str]:
+def select_transit_rules(transit_data: dict[str, Any], domain: str, top_k: int = 6) -> list[str]:
     """Select BPHS gochara rules relevant to current transits."""
     rules: list[str] = list(TRANSIT_RULES[:4]) + ASHTAKAVARGA_RULES[:1]
 
@@ -188,37 +239,79 @@ def select_transit_rules(transit_data: dict[str, Any], domain: str, top_k: int =
             "restructuring, hard lessons, and eventual transformation. Results depend on Saturn's natal strength."
         )
 
-    # Jupiter gochara
+    # Jupiter gochara — full GOCHARA_PLANET_IN_HOUSE lookup
     jup_from_moon = transit_data.get("jupiter_from_moon")
-    if jup_from_moon in (5, 7, 9):
-        rules.append(f"Jupiter transiting the {jup_from_moon}th from natal Moon — Gurubala active: highly auspicious period for growth, opportunity, and auspicious events.")
-    elif jup_from_moon in (4, 8, 12):
-        rules.append(f"Jupiter transiting the {jup_from_moon}th from natal Moon — Guru is weak: exercise caution in expansion; results are delayed.")
+    if isinstance(jup_from_moon, int):
+        gochara_rule = GOCHARA_PLANET_IN_HOUSE.get("Jupiter", {}).get(jup_from_moon)
+        if gochara_rule:
+            rules.append(f"Jupiter from Moon ({jup_from_moon}th): {gochara_rule}")
+
+    # Saturn gochara
+    sat_from_moon = transit_data.get("saturn_from_moon")
+    if isinstance(sat_from_moon, int):
+        gochara_rule = GOCHARA_PLANET_IN_HOUSE.get("Saturn", {}).get(sat_from_moon)
+        if gochara_rule:
+            rules.append(f"Saturn from Moon ({sat_from_moon}th): {gochara_rule}")
+
+    # Rahu/Ketu gochara
+    rahu_from_moon = transit_data.get("rahu_from_moon")
+    if isinstance(rahu_from_moon, int):
+        gochara_rule = GOCHARA_PLANET_IN_HOUSE.get("Rahu", {}).get(rahu_from_moon)
+        if gochara_rule:
+            rules.append(f"Rahu from Moon ({rahu_from_moon}th): {gochara_rule}")
 
     rules.extend(DOMAIN_RULES.get(domain, [])[:2])
     return _deduplicate(rules)[:top_k]
 
 
-def select_yoga_rules(yoga_data: dict[str, Any], domain: str, top_k: int = 6) -> list[str]:
+def select_yoga_rules(yoga_data: dict[str, Any], domain: str, top_k: int = 8) -> list[str]:
     """Select BPHS yoga and dosha rules relevant to the chart's active yogas."""
     rules: list[str] = []
 
     active_yogas  = yoga_data.get("active_yogas",  [])
     active_doshas = yoga_data.get("active_doshas", [])
 
-    for yoga in active_yogas[:5]:
+    # Combined yoga lookup: YOGA_RULES (legacy) + ADDITIONAL_YOGA_RULES (new)
+    for yoga in active_yogas[:6]:
         name = yoga if isinstance(yoga, str) else yoga.get("name", "")
+        matched = False
         for key, rule in YOGA_RULES.items():
             if key.lower() in name.lower() or name.lower() in key.lower():
                 rules.append(f"{key}: {rule}")
+                matched = True
+                break
+        if not matched:
+            for key, info in ADDITIONAL_YOGA_RULES.items():
+                if key.lower() in name.lower() or name.lower() in key.lower():
+                    formation = "; ".join(info.get("formation", [])[:1])
+                    effect = "; ".join(info.get("effects", [])[:1])
+                    rules.append(f"{key}: {formation} → {effect}")
+                    break
+
+        # Nabhasa yogas
+        for key, info in NABHASA_YOGA_RULES.items():
+            if key.lower() in name.lower() or name.lower() in key.lower():
+                effect = info.get("effects", "")[:120]
+                rules.append(f"{key} (Nabhasa): {effect}")
                 break
 
-    for dosha in active_doshas[:3]:
+    for dosha in active_doshas[:4]:
         name = dosha if isinstance(dosha, str) else dosha.get("name", "")
-        for key, rule in YOGA_RULES.items():
-            if key.lower() in name.lower():
-                rules.append(f"{key} (dosha): {rule}")
-                break
+        name_lower = name.lower()
+        if "mangal" in name_lower or "kuja" in name_lower:
+            effects = "; ".join(MANGAL_DOSHA_RULES.get("effects", [])[:2])
+            rules.append(f"Mangal Dosha: {effects}")
+            cancellation = MANGAL_DOSHA_RULES.get("cancellation_conditions", [])
+            if cancellation:
+                rules.append(f"Mangal Dosha cancellation: {cancellation[0]}")
+        elif "kala_sarpa" in name_lower or "kala sarpa" in name_lower:
+            effects = "; ".join(KALA_SARPA_YOGA_RULES.get("effects", [])[:2])
+            rules.append(f"Kala Sarpa Yoga: {effects}")
+        else:
+            for key, rule in YOGA_RULES.items():
+                if key.lower() in name_lower:
+                    rules.append(f"{key} (dosha): {rule}")
+                    break
 
     # Add domain rules for yoga context
     rules.extend(DOMAIN_RULES.get(domain, DOMAIN_RULES["general"])[:3])
@@ -244,13 +337,53 @@ def select_all_rules(
     Return a dict of agent_name → list[rule_string] for all five agents.
     Call once per pipeline run.
     """
+    moon_nakshatra = natal_data.get("moon_nakshatra", "")
     return {
-        "natal":      select_natal_rules(natal_data,   domain, top_k=8),
-        "dasha":      select_dasha_rules(dasha_data,   domain, top_k=6),
-        "transit":    select_transit_rules(transit_data, domain, top_k=5),
+        "natal":      select_natal_rules(natal_data,   domain, top_k=10),
+        "dasha":      select_dasha_rules(dasha_data,   domain, top_k=8),
+        "transit":    select_transit_rules(transit_data, domain, top_k=6),
         "divisional": _divisional_rules(domain),
-        "yoga":       select_yoga_rules(yoga_data,     domain, top_k=6),
+        "yoga":       select_yoga_rules(yoga_data,     domain, top_k=8),
+        "nakshatra":  select_nakshatra_rules(moon_nakshatra, top_k=4),
+        "jaimini":    select_jaimini_rules(domain, top_k=3),
     }
+
+
+def select_nakshatra_rules(nakshatra_name: str, top_k: int = 4) -> list[str]:
+    """Return classical rules for a given nakshatra by name."""
+    rules: list[str] = []
+    nak = NAKSHATRA_RULES.get(nakshatra_name)
+    if not nak:
+        # fuzzy match on prefix
+        for k, v in NAKSHATRA_RULES.items():
+            if nakshatra_name.lower() in k.lower():
+                nak = v
+                break
+    if nak:
+        rules.append(
+            f"{nakshatra_name}: lord {nak['lord']}, sign {nak['sign']}, "
+            f"nature {nak['nature']}, deity {nak['deity']}, symbol {nak['symbol']}."
+        )
+        pk = PLANETARY_KARAKATWAS.get(nak["lord"])
+        if pk:
+            rules.append(f"{nak['lord']} (nakshatra lord) governs: {pk['primary'][:120]}")
+    return rules[:top_k]
+
+
+def select_jaimini_rules(domain: str, top_k: int = 3) -> list[str]:
+    """Return relevant Jaimini sutras for the given domain."""
+    rules: list[str] = []
+    domain_map = {
+        "marriage":    "Karakamsha",
+        "career":      "Rashi_Dasha",
+        "spirituality": "Chara_Karakas",
+        "general":     "Aspects",
+    }
+    section = domain_map.get(domain, "Aspects")
+    rules.extend(JAIMINI_RULES.get(section, [])[:top_k])
+    if not rules:
+        rules.extend(JAIMINI_RULES.get("Chara_Karakas", [])[:top_k])
+    return rules
 
 
 def _divisional_rules(domain: str) -> list[str]:
