@@ -764,6 +764,20 @@ input[type=number]:focus, input[type=text]:focus, textarea:focus, select:focus {
 }
 .cal-question label { font-size: 0.9rem !important; font-weight: 500 !important; color: #1C1C1E !important; }
 .cal-prediction { font-size: 0.76rem; color: #8E8E93; margin-top: 0.35rem; font-style: italic; }
+/* MCQ radio buttons */
+.cal-radio { margin-top: 0.5rem !important; }
+.cal-radio .wrap { gap: 0.4rem !important; flex-direction: column !important; }
+.cal-radio label span {
+    font-size: 0.85rem !important; padding: 0.45rem 0.85rem !important;
+    border-radius: 20px !important; border: 1.5px solid #C7C7CC !important;
+    cursor: pointer !important; transition: background 0.15s, border-color 0.15s !important;
+    display: inline-block !important;
+}
+.cal-radio label:has(input:checked) span {
+    background: #007AFF !important; color: #fff !important;
+    border-color: #007AFF !important;
+}
+.cal-radio label span:hover { border-color: #007AFF !important; }
 .cal-score {
     background: rgba(48,209,88,0.08); border: 1px solid rgba(48,209,88,0.30);
     border-radius: 12px; padding: 1rem; margin-top: 0.5rem;
@@ -1145,25 +1159,40 @@ def handle_compute_chart(year, month, day, hour, minute, place, lat_str, lon_str
 def handle_generate_calibration(chart_state):
     """Generate 10 calibration questions from the computed chart."""
     if chart_state is None:
+        empty_radio = [gr.update(choices=["Not applicable / Skip"], value=None)] * 10
         return (
             None,
             "⚠ Please compute your chart first (Phase 1).",
             *[""] * 10,
             *[""] * 10,
+            *empty_radio,
         )
 
     from vedic_astro.agents.calibration import generate_questions
     questions = generate_questions(chart_state, n=10)
 
-    q_texts     = [q.text           for q in questions]
+    q_texts     = [q.text            for q in questions]
     q_predicted = [q.predicted_timing for q in questions]
+    q_options   = [q.options          for q in questions]
 
     # Pad to exactly 10
     while len(q_texts) < 10:
         q_texts.append("")
         q_predicted.append("")
+        q_options.append(["Not applicable / Skip"])
 
-    return (questions, "Questions generated — answer as many as you can, skip any that don't apply.", *q_texts[:10], *q_predicted[:10])
+    radio_updates = [
+        gr.update(choices=opts, value=None)
+        for opts in q_options[:10]
+    ]
+
+    return (
+        questions,
+        "Questions generated — select the option that best matches your experience.",
+        *q_texts[:10],
+        *q_predicted[:10],
+        *radio_updates,
+    )
 
 
 def handle_score_calibration(chart_state, questions, *answers):
@@ -1561,7 +1590,12 @@ def build_demo() -> gr.Blocks:
             for i in range(10):
                 with gr.Group(visible=True, elem_classes="cal-question"):
                     q_label = gr.Markdown(f"*Q{i+1} — tap Generate above.*")
-                    ans     = gr.Textbox(label="Your answer", placeholder="e.g. 2018  or  Yes  or  skip", show_label=True, lines=1)
+                    ans     = gr.Radio(
+                        choices=["Not applicable / Skip"],
+                        value=None,
+                        label="Select your answer",
+                        elem_classes="cal-radio",
+                    )
                     pred    = gr.Markdown("", elem_classes="cal-prediction")
                     cal_q_labels.append(q_label)
                     cal_answers.append(ans)
@@ -1677,8 +1711,8 @@ def build_demo() -> gr.Blocks:
                      yoga_panel, shadbala_panel, vargas_panel, score_df],
         )
 
-        # Phase 2 — generate questions
-        gen_cal_outputs = [cal_questions, cal_status] + cal_q_labels + cal_predicted
+        # Phase 2 — generate questions (also updates Radio choices)
+        gen_cal_outputs = [cal_questions, cal_status] + cal_q_labels + cal_predicted + cal_answers
         gen_cal_btn.click(
             fn=handle_generate_calibration,
             inputs=[chart_state],

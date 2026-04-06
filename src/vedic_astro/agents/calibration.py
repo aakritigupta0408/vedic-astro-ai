@@ -51,6 +51,7 @@ class CalibrationQuestion:
     domain_factor: str          # which weight this validates: dasha|natal|transit|yoga|bhava
     predicted_timing: str       # what the chart predicts (shown to user after answering)
     answer_type: str            # "year" | "yes_no" | "description" | "period"
+    options: list[str] = field(default_factory=list)   # MCQ choices shown to user
     skippable: bool = True
 
 
@@ -250,6 +251,7 @@ def generate_questions(state: Any, n: int = 10) -> list[CalibrationQuestion]:
             domain_factor=q["domain_factor"],
             predicted_timing=_get_predicted_timing(q["id"], state),
             answer_type=q["answer_type"],
+            options=_generate_options(q["answer_type"], state),
         )
         for q in selected[:n]
     ]
@@ -289,6 +291,73 @@ def _question_is_relevant(question: dict, features: dict) -> bool:
     if trigger == "any":
         return True
     return bool(features.get(trigger, False))
+
+
+_PERIOD_OPTIONS = [
+    "Thriving — exceptional growth and gains",
+    "Positive — steady progress with minor setbacks",
+    "Mixed — equal highs and lows",
+    "Challenging — significant difficulties",
+    "Very difficult — major losses or crises",
+    "Not applicable / Skip",
+]
+
+_LIFE_PHASE_OPTIONS = [
+    "Building — establishing career, relationships, foundation",
+    "Peak — at my most successful and active",
+    "Transition — going through major changes",
+    "Consolidation — slowing down, reflecting, wisdom phase",
+    "Not applicable / Skip",
+]
+
+_YES_NO_OPTIONS = ["Yes", "No", "Not applicable / Skip"]
+
+
+def _generate_dasha_year_options(state: Any) -> list[str]:
+    """
+    Build MCQ options for year questions from the dasha timeline.
+    Each option is labelled with the dasha lord and its year range,
+    e.g. "Saturn period (2008–2026)".  Adult life only (age 15 onward).
+    Always ends with a Skip option.
+    """
+    skip = "Not applicable / Skip"
+    try:
+        from datetime import date as _date
+        from vedic_astro.engines.dasha_engine import compute_maha_dashas
+        from vedic_astro.engines.natal_engine import PlanetName
+
+        moon_lon = state.chart.planets[PlanetName.MOON].longitude
+        b = state.request.birth
+        birth_dt = _date(b.year, b.month, b.day)
+        adult_year = b.year + 15
+        current_year = _date.today().year + 5   # allow near-future options
+
+        all_mahas = compute_maha_dashas(moon_lon, birth_dt)
+        options: list[str] = []
+        for m in all_mahas:
+            m_start = m.start.year
+            m_end   = m.end.year
+            # Include periods that overlap with adult life up to 5 years ahead
+            if m_end < adult_year or m_start > current_year:
+                continue
+            lord = m.lord.value.title()
+            options.append(f"{lord} period ({m_start}–{m_end})")
+        return (options + [skip]) if options else [skip]
+    except Exception:
+        return [skip]
+
+
+def _generate_options(answer_type: str, state: Any) -> list[str]:
+    """Return MCQ choices for a given answer_type."""
+    if answer_type == "yes_no":
+        return list(_YES_NO_OPTIONS)
+    if answer_type == "year":
+        return _generate_dasha_year_options(state)
+    if answer_type == "period":
+        return list(_PERIOD_OPTIONS)
+    if answer_type == "description":
+        return list(_LIFE_PHASE_OPTIONS)
+    return ["Not applicable / Skip"]
 
 
 def _get_predicted_timing(question_id: str, state: Any) -> str:
@@ -436,7 +505,15 @@ def score_answers(
 
     for q in questions:
         ans = answer_map.get(q.id)
-        if ans is None or ans.get("skipped") or not ans.get("answer"):
+        raw = ans.get("answer") if ans else None
+        # Treat "Not applicable / Skip" MCQ choice as skipped
+        is_skip = (
+            ans is None
+            or ans.get("skipped")
+            or not raw
+            or str(raw).strip().lower().startswith("not applicable")
+        )
+        if is_skip:
             skipped += 1
             continue
 
@@ -504,7 +581,9 @@ def _score_single_answer(
         answer_str = str(raw_answer).strip().lower()
         if answer_str in ("yes", "y", "true", "1"):
             return 0.80
-        return 0.40  # "no" means chart prediction may not have manifested
+        if answer_str in ("no", "n", "false", "0"):
+            return 0.40
+        return 0.5  # "not applicable" or other
 
     if q.answer_type in ("description", "period"):
         return _score_period_answer(raw_answer, q, state, notes)
@@ -521,11 +600,37 @@ def _score_year_answer(
     state: Any,
     notes: list[str],
 ) -> float:
-    """Compare a year answer against the historically active dasha at that year."""
+    """
+    Score a year/period answer.
+
+    Accepts two formats:
+    - MCQ dasha-label format: "Saturn period (2008–2026)"  → extract lord directly
+    - Legacy plain-year format: "2018"  → look up historical dasha
+    """
+    answer_str = str(raw_answer).strip()
+
+    # MCQ dasha-label format: "<Lord> period (YYYY–YYYY)"
+    import re as _re
+    m = _re.match(r"^([A-Za-z]+)\s+period\s*\(", answer_str)
+    if m:
+        lord = m.group(1).lower()
+        match_strength = _lord_matches_question(lord, q.id)
+        label = f"{lord.title()} period"
+        if match_strength == "strong":
+            notes.append(f"✓ {q.id}: {label} — karaka match")
+            return 0.85
+        elif match_strength == "partial":
+            notes.append(f"△ {q.id}: {label} — neutral lord")
+            return 0.55
+        else:
+            notes.append(f"✗ {q.id}: {label} — weak match")
+            return 0.20
+
+    # Legacy plain-year format
     try:
-        year = int(str(raw_answer).strip())
+        year = int(answer_str)
     except (ValueError, TypeError):
-        return 0.5   # can't parse — neutral
+        return 0.5
 
     if state is None or state.chart is None:
         return 0.5
@@ -540,7 +645,7 @@ def _score_year_answer(
         birth_dt = _date(b.year, b.month, b.day)
 
         all_mahas = compute_maha_dashas(moon_lon, birth_dt)
-        event_date = _date(year, 6, 15)   # approximate mid-year
+        event_date = _date(year, 6, 15)
 
         active_maha = next((m for m in all_mahas if m.start <= event_date < m.end), None)
         if active_maha is None:
