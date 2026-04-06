@@ -294,33 +294,42 @@ def _question_is_relevant(question: dict, features: dict) -> bool:
 def _get_predicted_timing(question_id: str, state: Any) -> str:
     """
     Return a brief description of what the chart predicts for this event.
-    Shown to user after they answer to show chart accuracy.
+    Uses karaka information so users can compare against their own experience.
     """
+    karakas = _TIMING_HINT.get(question_id, "")
     try:
         dasha = state.dasha_window
         if dasha is None:
-            return "Chart data unavailable"
-
-        maha_lord  = dasha.mahadasha.lord.value
+            return karakas or "Chart data unavailable"
+        maha_lord  = dasha.mahadasha.lord.value.title()
         maha_start = str(dasha.mahadasha.start)[:4]
         maha_end   = str(dasha.mahadasha.end)[:4]
-        antar_lord = dasha.antardasha.lord.value if dasha.antardasha else None
-
-        timing_map = {
-            "career_start":   f"Career breakthroughs favoured in {maha_lord} Mahadasha ({maha_start}–{maha_end})",
-            "marriage_year":  f"Marriage indicated in Venus/7th lord dasha period",
-            "first_child":    f"Children favoured in Jupiter/5th lord dasha",
-            "health_event":   f"Health challenges more likely in 6th/8th lord dasha",
-            "foreign_move":   f"Foreign travel/relocation favoured in Rahu/12th lord dasha",
-            "wealth_gain":    f"Major gains expected in 2nd/11th lord or Jupiter dasha",
-            "current_period": (
-                f"Current period: {maha_lord} Mahadasha"
-                + (f" / {antar_lord} Antardasha" if antar_lord else "")
-            ),
-        }
-        return timing_map.get(question_id, f"Active dasha: {maha_lord} ({maha_start}–{maha_end})")
+        antar_lord = dasha.antardasha.lord.value.title() if dasha.antardasha else None
+        current = (
+            f"Current dasha: {maha_lord} ({maha_start}–{maha_end})"
+            + (f" / {antar_lord}" if antar_lord else "")
+        )
+        return f"{karakas}  ·  {current}" if karakas else current
     except Exception:
-        return "Chart-based prediction unavailable"
+        return karakas or "Chart-based prediction unavailable"
+
+
+# Human-readable karaka hint shown alongside each question
+_TIMING_HINT: dict[str, str] = {
+    "career_start":           "Career peaks in Sun, Saturn, Mercury, Jupiter or Mars dasha",
+    "career_change":          "Career shifts common in Saturn, Rahu or Mars dasha",
+    "marriage_year":          "Marriage favoured in Venus, Jupiter or Moon dasha",
+    "relationship_challenge": "Relationship stress rises in Saturn, Rahu, Mars or Ketu dasha",
+    "first_child":            "Children favoured in Jupiter or Moon dasha",
+    "wealth_gain":            "Windfalls linked to Jupiter, Venus or Mercury dasha",
+    "wealth_loss":            "Financial setbacks common in Saturn, Rahu or Ketu dasha",
+    "health_event":           "Health challenges rise in Saturn, Rahu, Mars or Ketu dasha",
+    "foreign_move":           "Foreign moves favoured in Rahu, Jupiter or Ketu dasha",
+    "education":              "Degrees completed in Jupiter, Mercury or Sun dasha",
+    "family_loss":            "Losses common in Saturn, Rahu, Ketu or Mars dasha",
+    "spiritual":              "Spiritual turning points in Jupiter, Ketu or Saturn dasha",
+    "raj_yoga":               "Authority/recognition peaks in Sun, Jupiter or Saturn dasha",
+}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -354,17 +363,42 @@ class CalibrationResult:
     notes:            list[str] = field(default_factory=list)
 
     def summary_markdown(self) -> str:
+        # Accuracy indicator
+        pct = self.overall_accuracy
+        if pct >= 0.70:
+            acc_label = "Strong"
+        elif pct >= 0.50:
+            acc_label = "Moderate"
+        else:
+            acc_label = "Weak"
+
         lines = [
-            f"**Calibration complete** · {self.answered_count} questions answered\n",
-            f"**Overall chart accuracy:** {self.overall_accuracy:.0%}\n",
-            "**Calibrated factor weights:**",
+            f"**Calibration complete** · {self.answered_count} question(s) scored\n",
+            f"**Chart accuracy: {pct:.0%}** ({acc_label})\n",
+            "**Calibrated weights:**",
         ]
         for factor, w in self.weights.items():
             bar = "█" * int(w * 20)
             lines.append(f"- {factor.title()}: `{w:.0%}` {bar}")
-        if self.notes:
-            lines.append("\n**Notes:**")
-            for n in self.notes:
+
+        # Per-factor match scores
+        factor_scores = {
+            "Dasha":   self.dasha_match,
+            "Natal":   self.natal_match,
+            "Transit": self.transit_match,
+            "Yoga":    self.yoga_match,
+            "Bhava":   self.bhava_match,
+        }
+        lines.append("\n**Factor match scores:**")
+        for name, score in factor_scores.items():
+            stars = "★" * round(score * 5) + "☆" * (5 - round(score * 5))
+            lines.append(f"- {name}: {stars} ({score:.0%})")
+
+        # Significant notes only (skip the redundant accuracy repeat)
+        event_notes = [n for n in self.notes if not n.startswith("Chart accuracy")]
+        if event_notes:
+            lines.append("\n**Event matches:**")
+            for n in event_notes[:6]:
                 lines.append(f"- {n}")
         return "\n".join(lines)
 
@@ -487,41 +521,80 @@ def _score_year_answer(
     state: Any,
     notes: list[str],
 ) -> float:
-    """Compare a year answer against dasha timing predictions."""
+    """Compare a year answer against the historically active dasha at that year."""
     try:
         year = int(str(raw_answer).strip())
     except (ValueError, TypeError):
         return 0.5   # can't parse — neutral
 
-    if state is None or state.dasha_window is None:
+    if state is None or state.chart is None:
         return 0.5
 
-    # Check if year falls within mahadasha or antardasha
     try:
-        maha = state.dasha_window.mahadasha
-        maha_start_yr = maha.start.year
-        maha_end_yr   = maha.end.year
+        from datetime import date as _date
+        from vedic_astro.engines.dasha_engine import compute_maha_dashas
+        from vedic_astro.engines.natal_engine import PlanetName
 
-        if maha_start_yr <= year <= maha_end_yr:
-            notes.append(
-                f"✓ {q.id}: year {year} falls within "
-                f"{maha.lord.value} Mahadasha ({maha_start_yr}–{maha_end_yr})"
-            )
+        moon_lon = state.chart.planets[PlanetName.MOON].longitude
+        b = state.request.birth
+        birth_dt = _date(b.year, b.month, b.day)
+
+        all_mahas = compute_maha_dashas(moon_lon, birth_dt)
+        event_date = _date(year, 6, 15)   # approximate mid-year
+
+        active_maha = next((m for m in all_mahas if m.start <= event_date < m.end), None)
+        if active_maha is None:
+            return 0.5
+
+        lord = active_maha.lord.value.lower()
+        match_strength = _lord_matches_question(lord, q.id)
+
+        if match_strength == "strong":
+            notes.append(f"✓ {q.id}: {year} in {lord.title()} Mahadasha — karaka match")
             return 0.85
-
-        # Within 2 years of mahadasha boundary → partial match
-        if abs(year - maha_start_yr) <= 2 or abs(year - maha_end_yr) <= 2:
-            return 0.65
-
-        # Check previous/next maha (rough check)
-        notes.append(
-            f"△ {q.id}: year {year} outside active dasha "
-            f"({maha_start_yr}–{maha_end_yr})"
-        )
-        return 0.30
+        elif match_strength == "partial":
+            notes.append(f"△ {q.id}: {year} in {lord.title()} Mahadasha — neutral lord")
+            return 0.55
+        else:
+            notes.append(f"✗ {q.id}: {year} in {lord.title()} Mahadasha — weak match")
+            return 0.20
 
     except Exception:
         return 0.5
+
+
+# Karaka (significator) lords per question — strong karaka = high match score
+_KARAKA_LORDS: dict[str, list[str]] = {
+    "career_start":          ["sun", "saturn", "mercury", "jupiter", "mars"],
+    "career_change":         ["saturn", "rahu", "mars", "sun", "ketu"],
+    "marriage_year":         ["venus", "jupiter", "moon"],
+    "relationship_challenge":["saturn", "rahu", "mars", "ketu"],
+    "first_child":           ["jupiter", "moon", "venus"],
+    "wealth_gain":           ["jupiter", "venus", "mercury", "moon"],
+    "wealth_loss":           ["saturn", "rahu", "ketu", "mars"],
+    "health_event":          ["saturn", "rahu", "mars", "ketu", "sun"],
+    "foreign_move":          ["rahu", "jupiter", "ketu", "moon"],
+    "education":             ["jupiter", "mercury", "sun", "saturn"],
+    "family_loss":           ["saturn", "rahu", "ketu", "mars", "moon"],
+    "spiritual":             ["jupiter", "ketu", "saturn", "moon"],
+    "raj_yoga":              ["sun", "jupiter", "mars", "saturn"],
+    "current_period":        [],  # scored separately
+    "life_phase":            [],  # scored separately
+}
+
+
+def _lord_matches_question(lord: str, question_id: str) -> str:
+    """Return 'strong', 'partial', or 'weak' based on karaka match."""
+    karakas = _KARAKA_LORDS.get(question_id, [])
+    if not karakas:
+        return "partial"   # no mapping → neutral
+    if lord in karakas:
+        return "strong"
+    # Neutral lords (Sun/Moon/Mercury broadly relevant to most domains)
+    neutral = {"sun", "moon", "jupiter"}
+    if lord in neutral:
+        return "partial"
+    return "weak"
 
 
 def _score_period_answer(

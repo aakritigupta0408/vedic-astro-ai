@@ -931,7 +931,7 @@ def handle_generate_calibration(chart_state):
     return (questions, "Questions generated — answer as many as you can, skip any that don't apply.", *q_texts[:10], *q_predicted[:10])
 
 
-def handle_score_calibration(questions, *answers):
+def handle_score_calibration(chart_state, questions, *answers):
     """Score calibration answers and return adjusted weights."""
     if not questions:
         return (None, "⚠ Generate questions first.")
@@ -945,7 +945,7 @@ def handle_score_calibration(questions, *answers):
             "skipped": not (ans and str(ans).strip()),
         })
 
-    result = score_answers(questions, answer_list)
+    result = score_answers(questions, answer_list, state=chart_state)
     return (result, result.summary_markdown())
 
 
@@ -1424,10 +1424,10 @@ def build_demo() -> gr.Blocks:
             outputs=gen_cal_outputs,
         )
 
-        # Phase 2 — score answers
+        # Phase 2 — score answers (chart_state needed for historical dasha lookup)
         score_cal_btn.click(
             fn=handle_score_calibration,
-            inputs=[cal_questions] + cal_answers,
+            inputs=[chart_state, cal_questions] + cal_answers,
             outputs=[calibration_result, cal_result_md],
         )
 
