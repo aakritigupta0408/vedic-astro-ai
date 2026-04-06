@@ -613,54 +613,112 @@ input[type=number]:focus, input[type=text]:focus, textarea:focus, select:focus {
     .hdr { padding: 1.5rem 1rem 0.7rem; }
     .hdr h1 { font-size: 1.6rem; }
     .card { border-radius: 14px !important; }
+    .p3-card { border-radius: 16px !important; }
     .btn-primary { font-size: 0.9rem !important; min-height: 48px !important; }
 
     /* Stack rows vertically on small screens */
     .gr-row { flex-direction: column !important; }
     .gr-row > * { min-width: 100% !important; width: 100% !important; }
 
-    /* Full-width chat */
-    .chatbot { height: 360px !important; }
+    /* Full-width chat, shorter on mobile */
+    .chatbot { height: 300px !important; }
     .panel-md table { font-size: 0.76rem !important; }
 
     /* Bigger touch targets for number inputs */
     input[type=number] { min-height: 48px !important; font-size: 1rem !important; text-align: center !important; }
+
+    /* Domain chips smaller on mobile */
+    .domain-chips label { font-size: 0.75rem !important; padding: 0.25rem 0.7rem !important; }
+
+    /* Meta row stack */
+    .p3-meta { flex-direction: row; flex-wrap: wrap; gap: 0.35rem; }
 }
 
 /* ── Phase 3 wrapper card (pure HTML div, not Gradio column) ─── */
 .p3-card {
     background: #fff;
     border-radius: 20px;
-    padding: 1.2rem 1rem 1rem;
+    padding: 1.1rem 1rem 1rem;
     box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 20px rgba(0,0,0,0.04);
     margin-bottom: 0;
 }
 @media (min-width: 768px) {
-    .p3-card { padding: 1.5rem 1.4rem 1.2rem; }
+    .p3-card { padding: 1.4rem 1.4rem 1.2rem; }
 }
 
-/* Domain dropdown — compact inline */
-.domain-drop { max-width: 260px; }
-.domain-drop .wrap { min-height: 40px !important; }
+/* Phase 3 top header row */
+.p3-header {
+    display: flex; align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.85rem;
+}
+.p3-title {
+    font-size: 1.05rem; font-weight: 700;
+    color: #1C1C1E; letter-spacing: -0.025em;
+}
+.p3-subtitle {
+    font-size: 0.72rem; color: #8E8E93;
+    font-weight: 400; letter-spacing: -0.005em;
+    margin-top: 0.1rem;
+}
+
+/* Domain chips — horizontal scrolling pill row */
+.domain-chips > .wrap, .domain-chips .gradio-radio > div {
+    display: flex !important; flex-direction: row !important;
+    flex-wrap: nowrap !important; overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    gap: 0.35rem !important; padding: 0 0 0.15rem !important;
+    align-items: center !important;
+}
+.domain-chips > .wrap::-webkit-scrollbar,
+.domain-chips .gradio-radio > div::-webkit-scrollbar { display: none !important; }
+/* Each chip label */
+.domain-chips label {
+    background: #F2F2F7 !important; border-radius: 980px !important;
+    padding: 0.28rem 0.85rem !important; font-size: 0.79rem !important;
+    font-weight: 500 !important; cursor: pointer !important;
+    border: 1.5px solid transparent !important;
+    transition: background 0.15s, color 0.15s, border-color 0.15s !important;
+    color: #3A3A3C !important; white-space: nowrap !important;
+    flex-shrink: 0 !important; min-height: 30px !important;
+    display: inline-flex !important; align-items: center !important;
+    letter-spacing: -0.005em !important;
+}
+.domain-chips label:has(input:checked) {
+    background: #007AFF !important; color: #fff !important;
+    border-color: #007AFF !important;
+}
+.domain-chips input[type=radio] {
+    position: absolute !important; opacity: 0 !important;
+    pointer-events: none !important; width: 0 !important; height: 0 !important;
+}
+/* Hide Gradio label above chips */
+.domain-chips > .block > label,
+.domain-chips > label { display: none !important; }
 
 /* Input bar */
-.input-bar { margin-top: 0.75rem; }
+.input-bar {
+    margin-top: 0.7rem;
+    border-top: 0.5px solid rgba(60,60,67,0.10);
+    padding-top: 0.7rem;
+}
 .input-row {
     display: flex !important; align-items: flex-end !important;
-    gap: 0.5rem !important; flex-wrap: nowrap !important;
+    gap: 0.45rem !important; flex-wrap: nowrap !important;
 }
 .input-row > div { margin: 0 !important; }
 
-/* Query textbox — single line, iOS messages style */
+/* Query textbox — iOS Messages pill style */
 .query-box textarea {
     border-radius: 22px !important;
     border: 1.5px solid #E5E5EA !important;
     background: #F2F2F7 !important;
     font-size: 0.95rem !important;
     resize: none !important;
-    min-height: 46px !important;
-    max-height: 120px !important;
-    padding: 0.65rem 1rem !important;
+    min-height: 44px !important;
+    max-height: 110px !important;
+    padding: 0.6rem 1rem !important;
     line-height: 1.5 !important;
     transition: border-color 0.18s, box-shadow 0.18s, background 0.18s !important;
 }
@@ -672,11 +730,11 @@ input[type=number]:focus, input[type=text]:focus, textarea:focus, select:focus {
 
 /* Circular send button */
 .send-btn {
-    width: 46px !important; height: 46px !important;
-    min-width: 46px !important; min-height: 46px !important;
+    width: 44px !important; height: 44px !important;
+    min-width: 44px !important; min-height: 44px !important;
     border-radius: 50% !important;
     padding: 0 !important; margin: 0 !important;
-    font-size: 1.3rem !important; line-height: 1 !important;
+    font-size: 1.25rem !important; line-height: 1 !important;
     background: #007AFF !important; color: #fff !important;
     border: none !important; flex-shrink: 0 !important;
     display: flex !important; align-items: center !important;
@@ -685,24 +743,50 @@ input[type=number]:focus, input[type=text]:focus, textarea:focus, select:focus {
     transition: background 0.15s, transform 0.12s, box-shadow 0.15s !important;
 }
 .send-btn:hover { background: #0A84FF !important; box-shadow: 0 4px 14px rgba(0,122,255,0.38) !important; }
-.send-btn:active { transform: scale(0.93) !important; }
+.send-btn:active { transform: scale(0.92) !important; }
 
-/* Clear button — small, right‑aligned */
-.clear-btn {
-    margin-top: 0.5rem !important;
-    float: right !important;
-    min-height: 34px !important;
-    font-size: 0.8rem !important;
-    padding: 0 0.9rem !important;
-    background: #F2F2F7 !important;
-    color: #8E8E93 !important;
-    border: none !important;
-    border-radius: 980px !important;
+/* Status row — inline, below input bar */
+.p3-meta {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 0.45rem; min-height: 28px;
 }
-.clear-btn:hover { background: #E5E5EA !important; color: #3A3A3C !important; }
+
+/* Clear button — small ghost pill, right side of meta row */
+.clear-btn {
+    min-height: 30px !important; height: 30px !important;
+    font-size: 0.77rem !important;
+    padding: 0 0.85rem !important;
+    background: transparent !important;
+    color: #8E8E93 !important;
+    border: 1px solid rgba(60,60,67,0.15) !important;
+    border-radius: 980px !important;
+    transition: all 0.15s !important;
+}
+.clear-btn:hover {
+    background: #F2F2F7 !important; color: #3A3A3C !important;
+    border-color: rgba(60,60,67,0.25) !important;
+}
+
+/* Rules section */
+.rules-header {
+    display: flex; align-items: center; gap: 0.4rem;
+    margin: 1rem 0 0.5rem;
+}
+.rules-header-text {
+    font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.075em; color: #8E8E93;
+}
+.rules-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: #007AFF; flex-shrink: 0;
+}
 
 /* Rules placeholder */
-.rules-placeholder { color: #8E8E93; font-size: 0.82rem; margin: 0; font-style: italic; }
+.rules-placeholder {
+    color: #C7C7CC; font-size: 0.82rem; margin: 0;
+    font-style: italic; text-align: center;
+    padding: 0.5rem 0;
+}
 
 /* ── Hide Gradio chrome ───────────────────────────────────────── */
 footer, .built-with, #footer, .svelte-1ipelgc { display: none !important; }
@@ -1237,20 +1321,26 @@ def build_demo() -> gr.Blocks:
         # ══════════════════════════════════════════════════════════════════
         gr.HTML('<div class="p3-card">')   # ← open wrapper card
 
-        gr.HTML('<p class="sec-heading" style="margin-bottom:0.6rem">💬 Ask your question</p>')
+        # Header: title + tagline
+        gr.HTML('''
+        <div class="p3-header">
+          <div>
+            <div class="p3-title">💬 Ask your chart</div>
+            <div class="p3-subtitle">Powered by multi-agent Vedic AI</div>
+          </div>
+        </div>
+        ''')
 
-        domain_sel = gr.Dropdown(
-            choices=["auto", "general", "career", "marriage", "wealth",
-                     "health", "spirituality", "children", "travel", "family", "social_standing"],
-            value="auto", label="Domain",
-            info="'auto' detects from your question",
-            elem_classes="domain-drop",
+        # Domain chips — horizontal scrolling iOS pill selector
+        domain_sel = gr.Radio(
+            choices=["auto", "career", "marriage", "wealth",
+                     "health", "spirituality", "children", "travel", "family"],
+            value="auto", label="", show_label=False,
+            elem_classes="domain-chips",
         )
 
-        gr.HTML('<div class="gap-sm"></div>')
-
         chatbot = gr.Chatbot(
-            label="", height=400, type="messages",
+            label="", height=340, type="messages",
             show_copy_button=True, show_label=False,
             elem_classes="chatbot",
             placeholder=(
@@ -1259,22 +1349,30 @@ def build_demo() -> gr.Blocks:
             ),
         )
 
-        # Input bar — pinned inside the card
+        # Input bar — separated by top border, Messages-style
         gr.HTML('<div class="input-bar">')
         with gr.Row(equal_height=True, elem_classes="input-row"):
             query_input = gr.Textbox(
-                label="", placeholder="Ask about career, marriage, wealth, health…",
+                label="", placeholder="Ask about career, marriage, health…",
                 lines=1, scale=5, show_label=False, elem_classes="query-box",
             )
             ask_btn = gr.Button("↑", variant="primary", scale=0,
-                                min_width=48, elem_classes="send-btn")
+                                min_width=44, elem_classes="send-btn")
         gr.HTML('</div>')
 
+        # Meta row: status left, clear right
+        gr.HTML('<div class="p3-meta">')
         p3_status = gr.Markdown("", elem_classes="status-line")
-        clear_btn = gr.Button("Clear", elem_classes="btn-secondary clear-btn", size="sm")
+        clear_btn = gr.Button("Clear", elem_classes="clear-btn", size="sm")
+        gr.HTML('</div>')
 
-        gr.HTML('<div class="gap-sm"></div>')
-        gr.HTML('<p class="sec-heading">📜 Classical rules applied</p>')
+        # Classical rules
+        gr.HTML('''
+        <div class="rules-header">
+          <span class="rules-dot"></span>
+          <span class="rules-header-text">Classical rules applied</span>
+        </div>
+        ''')
         bphs_highlights = gr.HTML(
             '<p class="rules-placeholder">Rules appear after each reading.</p>'
         )
