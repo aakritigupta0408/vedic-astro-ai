@@ -62,10 +62,13 @@ class PipelineState:
     dasha_window: Any = None               # DashaWindow
     transit_overlay: Any = None            # TransitOverlay
     varga_charts: dict = field(default_factory=dict)
+    special_lagna_bundle: Any = None       # SpecialLagnaBundle
+    jaimini_bundle: Any = None             # JaiminiBundle
     yoga_bundle: Any = None                # YogaDoshaBundle
     shadbala: Any = None                   # dict[str, ShadbalaScore]
     features: Any = None                   # AstroFeatures
     score: Any = None                      # ScoreBreakdown
+    chart_weights: Any = None              # ChartWeights (calibration-tuned)
 
     # RAG
     retrieved_rules: dict[str, list[str]] = field(default_factory=dict)
@@ -73,6 +76,7 @@ class PipelineState:
 
     # LLM narratives
     agent_outputs: dict[str, str] = field(default_factory=dict)
+    master_output: Any = None              # MasterOutput
     synthesis_raw: str = ""
     critic_result: Any = None
     final_reading: str = ""
@@ -110,8 +114,11 @@ class PipelineRunner:
         self._dasha_agent = None
         self._transit_agent = None
         self._divisional_agent = None
+        self._special_lagna_agent = None
+        self._jaimini_agent = None
         self._yoga_agent = None
         self._synthesis = None
+        self._master_agent = None
         self._critic = None
         self._reviser = None
 
@@ -123,7 +130,10 @@ class PipelineRunner:
         from vedic_astro.agents.dasha_agent import DashaAgent
         from vedic_astro.agents.transit_agent import TransitAgent
         from vedic_astro.agents.divisional_agent import DivisionalAgent
+        from vedic_astro.agents.special_lagna_agent import SpecialLagnaAgent
+        from vedic_astro.agents.jaimini_agent import JaiminiAgent
         from vedic_astro.agents.synthesis_agent import SynthesisAgent
+        from vedic_astro.agents.master_agent import MasterAgent
         from vedic_astro.agents.critic_agent import CriticAgent
         from vedic_astro.agents.reviser_agent import ReviserAgent
         from vedic_astro.agents.solver_agent import YogaAgent
@@ -132,8 +142,11 @@ class PipelineRunner:
         self._dasha_agent = DashaAgent()
         self._transit_agent = TransitAgent()
         self._divisional_agent = DivisionalAgent()
+        self._special_lagna_agent = SpecialLagnaAgent()
+        self._jaimini_agent = JaiminiAgent()
         self._yoga_agent = YogaAgent()
         self._synthesis = SynthesisAgent()
+        self._master_agent = MasterAgent()
         self._critic = CriticAgent()
         self._reviser = ReviserAgent()
 
@@ -152,7 +165,12 @@ class PipelineRunner:
             self.stage_transit(state),
             self.stage_vargas(state),
         )
-        await self.stage_yogas(state)
+        # Special lagnas and Jaimini can run once vargas are done (need D9 data)
+        await asyncio.gather(
+            self.stage_special_lagnas(state),
+            self.stage_jaimini(state),
+            self.stage_yogas(state),
+        )
         await self.stage_shadbala(state)
         self.stage_features(state)
         self.stage_score(state)
@@ -180,6 +198,15 @@ class PipelineRunner:
         # Inject query + domain into state
         state.request.query  = query
         state.request.domain = domain
+
+        # Initialise chart weights (domain-aware defaults, then apply calibration)
+        from vedic_astro.learning.chart_weights import weights_for_domain
+        if state.chart_weights is None:
+            state.chart_weights = weights_for_domain(domain)
+        if calibration_weights:
+            # Apply calibration adjustments on top of domain defaults
+            for layer, delta in calibration_weights.get("layer_deltas", {}).items():
+                state.chart_weights.adjust(layer, delta)
 
         # Re-score with calibrated weights if provided
         if calibration_weights and state.features:
@@ -322,6 +349,59 @@ class PipelineRunner:
         )
         state.mark_done("vargas")
 
+    async def stage_special_lagnas(self, state: PipelineState) -> None:
+        """Compute special lagnas, arudha padas, and alternate chart frames."""
+        if state.special_lagna_bundle is not None:
+            return
+        if state.chart is None:
+            return
+        try:
+            from vedic_astro.engines.special_lagna_engine import compute_special_lagna_bundle
+            from vedic_astro.engines.natal_engine import PlanetName
+
+            # Extract D9 planet positions if available
+            d9_planets: dict[PlanetName, int] = {}
+            if 9 in state.varga_charts:
+                d9 = state.varga_charts[9]
+                d9_planets = {p: pos.sign_number for p, pos in d9.planets.items()}
+
+            b = state.request.birth
+            birth_hour_decimal = b.hour + b.minute / 60.0 + b.second / 3600.0
+
+            state.special_lagna_bundle = await asyncio.to_thread(
+                compute_special_lagna_bundle,
+                state.chart, d9_planets, birth_hour_decimal,
+            )
+            state.mark_done("special_lagnas")
+        except Exception as exc:
+            logger.warning("Special lagna computation failed: %s", exc)
+
+    async def stage_jaimini(self, state: PipelineState) -> None:
+        """Compute Jaimini chara karakas, rasi drishti, argalas, and chara dasha."""
+        if state.jaimini_bundle is not None:
+            return
+        if state.chart is None:
+            return
+        try:
+            from vedic_astro.engines.jaimini_engine import compute_jaimini_bundle
+            from vedic_astro.engines.natal_engine import PlanetName
+
+            d9_planets: dict[PlanetName, int] = {}
+            if 9 in state.varga_charts:
+                d9 = state.varga_charts[9]
+                d9_planets = {p: pos.sign_number for p, pos in d9.planets.items()}
+
+            b = state.request.birth
+            birth_dt = date(b.year, b.month, b.day)
+
+            state.jaimini_bundle = await asyncio.to_thread(
+                compute_jaimini_bundle,
+                state.chart, birth_dt, d9_planets, state.query_date,
+            )
+            state.mark_done("jaimini")
+        except Exception as exc:
+            logger.warning("Jaimini computation failed: %s", exc)
+
     async def stage_shadbala(self, state: PipelineState) -> None:
         """Compute Shadbala (six-fold planetary strength) for all planets."""
         if getattr(state, "shadbala", None) is not None:
@@ -458,7 +538,7 @@ class PipelineRunner:
     # ── Stage: solve (parallel specialist agents) ─────────────────────────
 
     async def stage_solve(self, state: PipelineState) -> None:
-        """Run 5 specialist agents concurrently — wall-clock ≈ 1 LLM call."""
+        """Run all specialist agents concurrently — wall-clock ≈ 1 LLM call."""
         if state.agent_outputs:
             return
 
@@ -473,29 +553,29 @@ class PipelineRunner:
                 retrieved_cases=state.retrieved_cases if step == "natal" else [],
             )
 
-        # Prepare engine data dicts (pass features for interdependence data)
-        natal_data = self._serialise_chart(state.chart)
-        dasha_data = self._serialise_dasha(state.dasha_window, state.features)
-        transit_data = self._serialise_transit(state.transit_overlay, state.features)
-        varga_data = self._serialise_vargas(state.varga_charts)
-        yoga_data = self._serialise_yogas(state.yoga_bundle, state.score, state.features)
+        natal_data        = self._serialise_chart(state.chart)
+        dasha_data        = self._serialise_dasha(state.dasha_window, state.features)
+        transit_data      = self._serialise_transit(state.transit_overlay, state.features)
+        varga_data        = self._serialise_vargas(state.varga_charts)
+        yoga_data         = self._serialise_yogas(state.yoga_bundle, state.score, state.features)
+        special_data      = self._serialise_special_lagnas(state.special_lagna_bundle)
+        jaimini_data      = self._serialise_jaimini(state.jaimini_bundle)
 
-        natal_inp = _make_input("natal", natal_data)
-        dasha_inp = _make_input("dasha", dasha_data)
-        transit_inp = _make_input("transit", transit_data)
-        div_inp = _make_input("divisional", varga_data)
-        yoga_inp = _make_input("yoga", yoga_data)
+        agents_and_inputs = [
+            ("natal",         self._natal_agent,         _make_input("natal", natal_data)),
+            ("dasha",         self._dasha_agent,         _make_input("dasha", dasha_data)),
+            ("transit",       self._transit_agent,       _make_input("transit", transit_data)),
+            ("divisional",    self._divisional_agent,    _make_input("divisional", varga_data)),
+            ("yoga",          self._yoga_agent,          _make_input("yoga", yoga_data)),
+            ("special_lagna", self._special_lagna_agent, _make_input("special_lagna", special_data)),
+            ("jaimini",       self._jaimini_agent,       _make_input("jaimini", jaimini_data)),
+        ]
 
         results = await asyncio.gather(
-            self._natal_agent.run(natal_inp),
-            self._dasha_agent.run(dasha_inp),
-            self._transit_agent.run(transit_inp),
-            self._divisional_agent.run(div_inp),
-            self._yoga_agent.run(yoga_inp),
+            *[agent.run(inp) for _, agent, inp in agents_and_inputs]
         )
 
-        steps = ["natal", "dasha", "transit", "divisional", "yoga"]
-        for step, out in zip(steps, results):
+        for (step, _, _), out in zip(agents_and_inputs, results):
             state.agent_outputs[step] = out.narrative
 
         state.mark_done("solve")
@@ -503,12 +583,17 @@ class PipelineRunner:
     # ── Stage: synthesise ─────────────────────────────────────────────────
 
     async def stage_synthesise(self, state: PipelineState) -> None:
+        """Run the master agent (cross-chart weighted) and the Parashari synthesis in parallel."""
         if state.synthesis_raw:
             return
+
         from vedic_astro.agents.synthesis_agent import SynthesisAgent, SynthesisInput
+        from vedic_astro.agents.master_agent import build_master_input
+
         score_summary = state.score.summary if state.score else ""
         score_table   = state.score.score_table_md if state.score else ""
-        inp = SynthesisInput(
+
+        synthesis_inp = SynthesisInput(
             query=state.request.query,
             natal_narrative=state.agent_outputs.get("natal", ""),
             dasha_narrative=state.agent_outputs.get("dasha", ""),
@@ -518,9 +603,25 @@ class PipelineRunner:
             score_summary=score_summary,
             score_table=score_table,
         )
-        out = await self._synthesis.run(inp)
-        state.synthesis_raw = out.narrative
-        state.final_reading = out.narrative
+        master_inp = build_master_input(
+            state,
+            query=state.request.query,
+            domain=state.request.domain,
+            weights=state.chart_weights,
+        )
+
+        synthesis_out, master_out = await asyncio.gather(
+            self._synthesis.run(synthesis_inp),
+            self._master_agent.run(master_inp),
+        )
+
+        state.master_output = master_out
+        # Master agent output leads the final reading; Parashari synthesis follows as detail
+        state.synthesis_raw = synthesis_out.narrative
+        state.final_reading = (
+            f"{master_out.narrative}\n\n"
+            f"--- Parashari Analysis ---\n{synthesis_out.narrative}"
+        )
         state.mark_done("synthesise")
 
     # ── Stage: critique + revise ──────────────────────────────────────────
@@ -680,6 +781,63 @@ class PipelineRunner:
                     for p, pos in vc.planets.items()
                 },
             }
+        return out
+
+    @staticmethod
+    def _serialise_special_lagnas(bundle) -> dict:
+        if bundle is None:
+            return {}
+        from vedic_astro.engines.natal_engine import RASHI_NAMES
+        out: dict = {
+            "chandra_lagna": RASHI_NAMES[bundle.chandra_lagna - 1],
+            "surya_lagna":   RASHI_NAMES[bundle.surya_lagna - 1],
+            "special_lagnas": {},
+            "arudha_padas":  {},
+        }
+        for name, sl in bundle.special.items():
+            out["special_lagnas"][name] = {
+                "sign": sl.sign_name,
+                "lord": sl.lord.value,
+            }
+        for key, pada in bundle.arudhas.padas.items():
+            out["arudha_padas"][key] = {
+                "sign": pada.sign_name,
+                "lord": pada.lord.value,
+            }
+        return out
+
+    @staticmethod
+    def _serialise_jaimini(bundle) -> dict:
+        if bundle is None:
+            return {}
+        from vedic_astro.engines.natal_engine import RASHI_NAMES
+        k = bundle.karakas
+        active = bundle.active_chara_dasha
+        out: dict = {
+            "karakas": {
+                "atmakaraka":    k.atmakaraka.value,
+                "amatyakaraka":  k.amatyakaraka.value,
+                "darakaraka":    k.darakaraka.value,
+                "putrakaraka":   k.putrakaraka.value,
+                "gnatikaraka":   k.gnatikaraka.value,
+                "bhratrikaraka": k.bhratrikaraka.value,
+                "matrikaraka":   k.matrikaraka.value,
+            },
+            "karaka_signs": k.sign_numbers,
+            "karakamsha": RASHI_NAMES[bundle.karakamsha_sign - 1],
+            "active_chara_dasha": {
+                "sign": active.sign_name,
+                "lord": active.lord.value,
+                "start": str(active.start),
+                "end":   str(active.end),
+                "duration_years": active.duration_years,
+            } if active else None,
+            "lagna_argala": {
+                "argalas": bundle.argalas.get("lagna", {}).argalas if "lagna" in bundle.argalas else [],
+                "counter_argalas": bundle.argalas.get("lagna", {}).counter_argalas if "lagna" in bundle.argalas else [],
+                "net_strength": bundle.argalas["lagna"].net_argala_strength if "lagna" in bundle.argalas else 0.5,
+            },
+        }
         return out
 
     @staticmethod

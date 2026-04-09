@@ -414,6 +414,85 @@ def _d45_formula(sign: int, degree: float) -> int:
     return ((start - 1 + part) % 12) + 1
 
 
+@register_varga(division=5, school="parashari")
+def _d5_formula(sign: int, degree: float) -> int:
+    """
+    D5 (Panchamsa) — 5 parts of 6° each.
+    Odd signs: Aries(1), Aquarius(11), Sagittarius(9), Gemini(3), Libra(7).
+    Even signs: Taurus(2), Virgo(6), Pisces(12), Capricorn(10), Scorpio(8).
+    """
+    part = int(degree / 6.0)
+    odd_targets  = [1, 11, 9, 3, 7]
+    even_targets = [2, 6, 12, 10, 8]
+    targets = odd_targets if sign % 2 == 1 else even_targets
+    return targets[part]
+
+
+@register_varga(division=6, school="parashari")
+def _d6_formula(sign: int, degree: float) -> int:
+    """
+    D6 (Shashthamsa) — 6 parts of 5° each.
+    Odd signs: start from Aries (1).
+    Even signs: start from Libra (7).
+    """
+    part = int(degree / 5.0)
+    start = 1 if sign % 2 == 1 else 7
+    return ((start - 1 + part) % 12) + 1
+
+
+@register_varga(division=8, school="parashari")
+def _d8_formula(sign: int, degree: float) -> int:
+    """
+    D8 (Ashtamsa) — 8 parts of 3°45' each.
+    All signs start from Aries; each successive part advances one sign.
+    """
+    part = int(degree / (30.0 / 8))
+    return ((0 + part) % 12) + 1   # Aries = index 0
+
+
+@register_varga(division=11, school="parashari")
+def _d11_formula(sign: int, degree: float) -> int:
+    """
+    D11 (Rudramsa / Labhamsa) — 11 parts of 2°43'38" each.
+    Odd signs: start from Aries.
+    Even signs: start from Libra.
+    """
+    part = int(degree / (30.0 / 11))
+    start = 1 if sign % 2 == 1 else 7
+    return ((start - 1 + part) % 12) + 1
+
+
+def _generic_varga_formula(division: int, sign: int, degree: float) -> int:
+    """
+    Generic equal-division formula for D-numbers without a specific classical rule.
+
+    Movable signs (1,4,7,10): start from same sign.
+    Fixed signs (2,5,8,11):   start from 5th from same sign.
+    Dual signs (3,6,9,12):    start from 9th from same sign.
+    Each subsequent part advances one sign.
+    """
+    part = int(degree / (30.0 / division))
+    modality = (sign - 1) % 3
+    offsets = {0: 0, 1: 4, 2: 8}
+    start = ((sign - 1 + offsets[modality]) % 12) + 1
+    return ((start - 1 + part) % 12) + 1
+
+
+# Register all remaining divisions (D13–D59 excluding already registered ones)
+# using the generic equal-division formula so the registry is complete.
+_ALREADY_REGISTERED = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 16, 20, 24, 27, 30, 40, 45, 60}
+for _d in range(1, 61):
+    if _d not in _ALREADY_REGISTERED:
+        # Build a closure capturing _d to avoid late-binding
+        def _make_generic(d: int):
+            def _formula(sign: int, degree: float) -> int:
+                return _generic_varga_formula(d, sign, degree)
+            _formula.__name__ = f"_d{d}_formula"
+            _formula.__doc__ = f"D{d} — generic equal-division formula (Parashari convention)."
+            return _formula
+        register_varga(_d, school="parashari_generic")(_make_generic(_d))
+
+
 @register_varga(division=60, school="parashari")
 def _d60_formula(sign: int, degree: float) -> int:
     """

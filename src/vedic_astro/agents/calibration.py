@@ -412,6 +412,11 @@ class CalibrationResult:
     skipped_count:    int   = 0
     notes:            list[str] = field(default_factory=list)
 
+    # Calibrated adjustments for ChartWeights (per multi-chart layer).
+    # These are passed to PipelineState.chart_weights.adjust() in Phase 3.
+    # Each value is a signed delta (positive = increase weight, negative = decrease).
+    layer_deltas: dict[str, float] = field(default_factory=dict)
+
     def summary_markdown(self) -> str:
         pct = self.overall_accuracy
         if pct >= 0.70:
@@ -1078,6 +1083,23 @@ def calibrate_convergence(
             f"{iters}{no_conv}"
         )
 
+    # Map scoring weights → ChartWeights layer deltas.
+    # The delta = calibrated_weight − default_weight, clamped to ±0.15.
+    # Mapping: dasha→vimshottari, natal→d1_natal, transit→transit, yoga→yogas
+    _FACTOR_TO_LAYER = {
+        "dasha":   "vimshottari",
+        "natal":   "d1_natal",
+        "transit": "transit",
+        "yoga":    "yogas",
+        "bhava":   "special_lagnas",
+    }
+    _DEFAULTS_SCORING = {"natal": 0.20, "dasha": 0.30, "transit": 0.20, "yoga": 0.20, "bhava": 0.10}
+    layer_deltas = {}
+    for factor, layer in _FACTOR_TO_LAYER.items():
+        delta = round(weights.get(factor, _DEFAULTS_SCORING[factor]) - _DEFAULTS_SCORING[factor], 4)
+        if abs(delta) > 0.001:
+            layer_deltas[layer] = max(-0.15, min(0.15, delta))
+
     return CalibrationResult(
         dasha_match=round(dasha_m, 3),
         natal_match=round(natal_m, 3),
@@ -1089,4 +1111,5 @@ def calibrate_convergence(
         answered_count=len(answered),
         skipped_count=skipped_count,
         notes=notes,
+        layer_deltas=layer_deltas,
     )
