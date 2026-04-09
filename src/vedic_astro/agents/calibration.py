@@ -1,33 +1,13 @@
 """
-calibration.py — Chart-aware calibration question generation and weight adjustment.
+calibration.py — Chart-aware weight calibration.
 
-Purpose
--------
-After computing a natal chart (Phase 1), the system generates 10 personalised
-questions about past life events. The user's answers are compared against what
-the chart's dashas/houses predicted. The match scores calibrate the six scoring
-weights so that Phase 3 predictions are tailored to how accurate this chart has
-proven to be for this specific person.
-
-Flow
-----
-1. generate_questions(state) → list[CalibrationQuestion]
-   Selects the 10 most chart-relevant questions from a bank of ~40.
-
-2. score_answers(questions, answers) → CalibrationResult
-   Computes per-factor match scores (0–1) and adjusted weights.
-
-3. apply_calibration(scorer_weights, calibration) → ScoringWeights
-   Returns updated ScoringWeights for use in Phase 3.
-
-Usage
------
-    from vedic_astro.agents.calibration import generate_questions, score_answers
+Generates personalised questions from the natal chart and runs a convergence
+loop that adjusts factor weights until the model's predictions match the user's
+answers. Calibrated weights feed into Phase 3 scoring.
 
     questions = generate_questions(pipeline_state)
-    # Show to user, collect answers …
-    result = score_answers(questions, user_answers)
-    # result.weights → use in scorer
+    result    = calibrate_convergence(questions, user_answers, pipeline_state)
+    # result.weights → pass to predict()
 """
 
 from __future__ import annotations
@@ -281,8 +261,8 @@ def _extract_chart_features(state: Any) -> dict:
             # 9th strong if Jupiter/Sun in 9th or 9th lord well-placed
             house9_planets = [p.value for p, pos in planets.items() if pos.house == 9]
             features["9th_strong"] = bool(house9_planets)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Chart feature extraction partial failure: %s", exc)
     return features
 
 
@@ -343,7 +323,8 @@ def _generate_dasha_year_options(state: Any) -> list[str]:
             lord = m.lord.value.title()
             options.append(f"{lord} period ({m_start}–{m_end})")
         return (options + [skip]) if options else [skip]
-    except Exception:
+    except Exception as exc:
+        logger.debug("Dasha option generation failed: %s", exc)
         return [skip]
 
 
@@ -813,8 +794,8 @@ def _natal_dignity_of_lord(lord: str, state: Any) -> float:
                 if sign in OWN_SIGNS.get(planet_title, []):
                     return _DIGNITY_SCORE["own_sign"]
                 return _DIGNITY_SCORE["neutral"]
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Natal dignity lookup failed: %s", exc)
     return 0.5
 
 
@@ -886,7 +867,8 @@ def _predict_year_period(q: CalibrationQuestion, state: Any, weights: dict) -> s
                 best_label = f"{lord.title()} period ({m.start.year}–{m.end.year})"
 
         return best_label
-    except Exception:
+    except Exception as exc:
+        logger.debug("Year period prediction failed: %s", exc)
         return skip
 
 
@@ -901,7 +883,8 @@ def _predict_yes_no(q: CalibrationQuestion, state: Any, weights: dict) -> str:
                 # If yoga is present AND we trust yoga factor sufficiently → Yes
                 return "Yes" if yoga_w >= 0.12 else "No"
         return "No"
-    except Exception:
+    except Exception as exc:
+        logger.debug("Yes/no prediction failed: %s", exc)
         return "Not applicable / Skip"
 
 
@@ -914,8 +897,8 @@ def _predict_period(state: Any, weights: dict) -> str:
         for threshold, label in _PERIOD_SENTIMENT:
             if score >= threshold:
                 return label
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Period prediction failed: %s", exc)
     return "Mixed — equal highs and lows"
 
 
@@ -928,8 +911,8 @@ def _predict_life_phase(state: Any, weights: dict) -> str:
         for threshold, label in _LIFE_PHASE_THRESHOLDS:
             if score >= threshold:
                 return label
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Life phase prediction failed: %s", exc)
     return "Transition — going through major changes"
 
 

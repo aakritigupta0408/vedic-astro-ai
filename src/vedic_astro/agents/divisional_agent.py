@@ -1,20 +1,4 @@
-"""
-divisional_agent.py — Specialist agent for divisional chart (Varga) interpretation.
-
-Scope: D9 (Navamsha) and query-relevant divisional charts only.
-Selection logic: map the query topic to the relevant Varga(s).
-
-Topic → Varga mapping
----------------------
-career/profession → D10 (Dashamsha)
-marriage/partner  → D9 (Navamsha)
-children          → D7 (Saptamsha)
-wealth            → D2 (Hora) + D11 (Ekadashamsha)
-health/longevity  → D3 (Drekkana) + D30 (Trimsamsha)
-spirituality      → D20 (Vimshamsha) + D24 (Chaturvimshamsha)
-property          → D4 (Chaturthamsha)
-default           → D9 always
-"""
+"""Specialist agent for divisional chart (Varga) interpretation."""
 
 from __future__ import annotations
 

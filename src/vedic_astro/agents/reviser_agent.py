@@ -1,15 +1,3 @@
-"""
-reviser_agent.py — Targeted revision pass triggered by a failing critic score.
-
-The reviser receives:
-- The original synthesis narrative
-- The critic's list of specific issues
-- The classical rules that were violated
-
-It produces a corrected narrative.  One revision pass maximum
-(settings.max_revision_passes = 1) to prevent infinite loops.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -48,22 +36,10 @@ class ReviserAgent:
         query: str,
         classical_rules: list[str],
     ) -> str:
-        """
-        Revise the synthesis narrative based on critic feedback.
-
-        Parameters
-        ----------
-        original       : The failed synthesis text.
-        critic_result  : CriticResult with issue list and scores.
-        query          : Original user query for context.
-        classical_rules: Rules the critic flagged as violated.
-
-        Returns
-        -------
-        str
-            Corrected narrative.
-        """
-        issues_str = "\n".join(f"- {i}" for i in critic_result.issues) or "General quality improvement needed."
+        issues_str = (
+            "\n".join(f"- {i}" for i in critic_result.issues)
+            or "General quality improvement needed."
+        )
         rules_str = (
             "\n".join(f"- {r}" for r in classical_rules[:5])
             if classical_rules else "Apply standard Parashari principles."
@@ -83,8 +59,8 @@ class ReviserAgent:
             model=settings.reviser_model,
             max_tokens=settings.synthesis_agent_max_tokens,
             temperature=0.3,
-            use_cache=False,   # always generate fresh revision
+            use_cache=False,
         )
 
-        logger.info("Reviser: completed revision (critic score was %.2f)", critic_result.composite_score)
+        logger.info("Reviser completed (critic score was %.2f)", critic_result.composite_score)
         return revised.strip()

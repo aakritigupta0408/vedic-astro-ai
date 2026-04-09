@@ -1,40 +1,14 @@
 """
-pipeline.py — Deterministic astrological pipeline with minimal LLM calls.
+pipeline.py — Deterministic astrological pipeline.
 
-Pipeline architecture (smolagents-inspired tool chain)
-------------------------------------------------------
-Each stage is an atomic, cacheable unit.  The ``PipelineRunner`` sequences
-them strictly in order.  No stage calls another stage — only the runner
-orchestrates.
+Stages: geocode → chart → dasha/transit/vargas (parallel) → yogas →
+        shadbala → features → score → RAG → specialist agents (parallel) →
+        synthesis → conditional critic/reviser → format.
 
-Stage order
------------
-  GEOCODE      → resolve birth location
-  CHART        → build NatalChart (permanent cache)
-  DASHA        → compute DashaWindow (permanent cache)
-  TRANSIT      → compute TransitOverlay (24h cache)
-  VARGAS       → compute DivisionalCharts (permanent cache)
-  YOGAS        → detect Yogas/Doshas (permanent cache)
-  FEATURES     → build AstroFeatures (in-memory, derived)
-  SCORE        → WeightedScorer (in-memory, derived)
-  RAG          → parallel rule + case retrieval (7d cache via LLM cache)
-  SOLVE        → parallel specialist LLM agents (5 calls, prompt-cached)
-  SYNTHESISE   → SynthesisAgent (1 LLM call, prompt-cached)
-  CRITIQUE     → CriticAgent (1 call, only if synthesis quality < threshold)
-  REVISE       → ReviserAgent (1 call, only if critic fails)
-  FORMAT       → OutputFormatter (no LLM call)
-
-Efficiency guarantees
----------------------
-- Re-querying the same chart/date combination costs ZERO engine calls.
-- Re-querying the same prompt costs ZERO LLM calls (Redis 7-day cache).
-- Specialist agents run in parallel (5 concurrent) — wall-clock ≈ 1 call.
-- Critic+Reviser add at most 2 extra calls, triggered only on low quality.
-
-Usage
------
+Usage:
     runner = PipelineRunner()
-    reading = await runner.run(ReadingRequest(birth=..., query="..."))
+    state  = await runner.compute_chart(request)   # Phase 1, no LLM
+    reading = await runner.predict(state, query)    # Phase 3, LLM
 """
 
 from __future__ import annotations
@@ -166,19 +140,7 @@ class PipelineRunner:
     # ── Phase 1: compute chart (no LLM, no question needed) ──────────────
 
     async def compute_chart(self, request: ReadingRequest) -> "PipelineState":
-        """
-        Phase 1 — Run all deterministic engine stages and return the PipelineState.
-
-        Computes: geocode → D1 natal chart → dasha → transit → D1–D60 vargas
-                  → yogas → shadbala → features → score.
-
-        No LLM calls are made. The returned state can be passed directly to
-        ``predict()`` (Phase 3) after optional calibration (Phase 2).
-
-        Returns
-        -------
-        PipelineState  (populated through stage_score)
-        """
+        """Phase 1 — run all deterministic engine stages, no LLM calls."""
         state = PipelineState(request=request)
         import time
         t0 = time.monotonic()
@@ -211,21 +173,7 @@ class PipelineRunner:
         domain: str = "general",
         calibration_weights: Optional[dict] = None,
     ) -> StructuredReading:
-        """
-        Phase 3 — Run LLM agents on a pre-computed PipelineState.
-
-        Parameters
-        ----------
-        state                : PipelineState from compute_chart() (Phase 1).
-        query                : The user's question.
-        domain               : life domain (career|marriage|wealth|health|general).
-        calibration_weights  : dict from CalibrationResult.weights (Phase 2).
-                               If None, uses default scorer weights.
-
-        Returns
-        -------
-        StructuredReading
-        """
+        """Phase 3 — run LLM agents on a pre-computed PipelineState."""
         import time
         t0 = time.monotonic()
 
@@ -306,7 +254,8 @@ class PipelineRunner:
             tz = pytz.timezone(b.timezone_str or "UTC")
             tob_local = tz.localize(datetime(b.year, b.month, b.day, b.hour, b.minute, b.second))
             tob_utc = tob_local.astimezone(pytz.utc)
-        except Exception:
+        except Exception as exc:
+            logger.warning("Timezone %r parse failed (%s); falling back to UTC", b.timezone_str, exc)
             tob_utc = datetime(b.year, b.month, b.day, b.hour, b.minute, b.second,
                                tzinfo=pytz.utc)
         state.chart = await asyncio.to_thread(
@@ -461,7 +410,8 @@ class PipelineRunner:
             transit_data = self._serialise_transit(state.transit_overlay, state.features)
             yoga_data    = self._serialise_yogas(state.yoga_bundle, state.score, state.features)
             bphs_rules = select_all_rules(natal_data, dasha_data, transit_data, yoga_data, domain)
-        except Exception:
+        except Exception as exc:
+            logger.debug("BPHS rule selection failed: %s", exc)
             bphs_rules = {}
 
         # 2. Attempt RAG retrieval (may be empty if index not built)
@@ -472,7 +422,8 @@ class PipelineRunner:
                     f"{state.request.query} {query_suffix}", domain_key, top_k=3
                 )
                 return domain_key, rules
-            except Exception:
+            except Exception as exc:
+                logger.debug("RAG rule retrieval failed for %s: %s", domain_key, exc)
                 return domain_key, []
 
         async def get_cases() -> list[str]:
@@ -482,7 +433,8 @@ class PipelineRunner:
                 return await CaseRetriever().retrieve(
                     state.chart, state.request.query, top_k=3, maha_lord=maha
                 )
-            except Exception:
+            except Exception as exc:
+                logger.debug("RAG case retrieval failed: %s", exc)
                 return []
 
         rag_results = await asyncio.gather(
@@ -506,12 +458,7 @@ class PipelineRunner:
     # ── Stage: solve (parallel specialist agents) ─────────────────────────
 
     async def stage_solve(self, state: PipelineState) -> None:
-        """
-        Run 5 specialist agents in parallel (natal, dasha, transit, divisional, yoga).
-
-        Each agent is a focused LLM call, prompt-cached by Redis.
-        All agents run concurrently — wall-clock ≈ 1 LLM call.
-        """
+        """Run 5 specialist agents concurrently — wall-clock ≈ 1 LLM call."""
         if state.agent_outputs:
             return
 
@@ -625,6 +572,16 @@ class PipelineRunner:
             critic_notes = state.critic_result.issues
             was_revised = not state.critic_result.passed
 
+        if state.score is None:
+            from vedic_astro.learning.scorer import ScoreBreakdown
+            state.score = ScoreBreakdown(
+                domain="general",
+                natal_strength=0.5, dasha_activation=0.5,
+                transit_trigger=0.5, yoga_support=0.5,
+                dosha_penalty=0.0, final_score=0.5,
+                interpretation="moderate_positive",
+            )
+
         reading = self._formatter.format(
             chart_id=state.chart_id,
             query=state.request.query,
@@ -632,7 +589,7 @@ class PipelineRunner:
             agent_outputs=state.agent_outputs,
             synthesis=state.synthesis_raw,
             final_reading=state.final_reading,
-            score=state.score or self._dummy_score(),
+            score=state.score,
             retrieved_rules=state.retrieved_rules,
             retrieved_cases=state.retrieved_cases,
             critic_notes=critic_notes,
@@ -747,16 +704,3 @@ class PipelineRunner:
             out["transit_activates"] = getattr(features, "transit_activates_yogas", [])
         return out
 
-    @staticmethod
-    def _dummy_score():
-        from vedic_astro.learning.scorer import ScoreBreakdown
-        return ScoreBreakdown(
-            domain="general",
-            natal_strength=0.5,
-            dasha_activation=0.5,
-            transit_trigger=0.5,
-            yoga_support=0.5,
-            dosha_penalty=0.0,
-            final_score=0.5,
-            interpretation="moderate_positive",
-        )

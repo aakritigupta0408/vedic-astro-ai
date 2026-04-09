@@ -317,19 +317,19 @@ CITY_COORDS: dict[str, tuple[float, float]] = {
 }
 
 
+# Lowercase index for O(1) case-insensitive lookup
+_CITY_COORDS_LOWER: dict[str, tuple[float, float]] = {
+    k.lower(): v for k, v in CITY_COORDS.items()
+}
+
+
 def fill_coords(place_str: str) -> tuple[str, str]:
-    """Return (lat_str, lon_str) for a recognised city, or ('', '') otherwise."""
     if not place_str:
         return "", ""
-    key = place_str.strip()
-    coords = CITY_COORDS.get(key)
-    if coords is None:
-        # case-insensitive fallback
-        kl = key.lower()
-        coords = next((v for k, v in CITY_COORDS.items() if k.lower() == kl), None)
+    coords = CITY_COORDS.get(place_str.strip()) or _CITY_COORDS_LOWER.get(place_str.strip().lower())
     if coords:
         return f"{coords[0]:.4f}", f"{coords[1]:.4f}"
-    return "", ""   # pipeline will geocode during computation
+    return "", ""  # pipeline geocodes anything not in the local dict
 
 
 def search_places(query: str) -> list[str]:

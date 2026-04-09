@@ -1,25 +1,7 @@
-"""
-synthesis_agent.py — Final integration agent.
-
-Receives all specialist agent outputs and synthesises them into one
-coherent, weighted reading.  This is the only agent that sees all
-sub-narratives simultaneously.
-
-Weighting strategy (applied in the prompt, not by code):
-  Natal foundation       → 35%
-  Dasha timing           → 30%
-  Transit activation     → 25%
-  Divisional refinement  → 10%
-
-The synthesis agent is the most token-expensive call and uses the
-strongest model (claude-sonnet-4-6 or claude-opus-4-6).
-"""
-
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
 
 from vedic_astro.tools.llm_client import get_llm_client
 from vedic_astro.settings import settings
@@ -57,9 +39,9 @@ class SynthesisInput:
     dasha_narrative: str
     transit_narrative: str
     divisional_narrative: str
-    retrieved_cases: list[str]         # similar VedAstro cases
-    score_summary: str = ""            # ScoreBreakdown.summary string for LLM anchoring
-    score_table: str = ""             # Markdown score table to embed in the prompt
+    retrieved_cases: list[str]
+    score_summary: str = ""
+    score_table: str = ""
 
 
 @dataclass
@@ -83,11 +65,12 @@ class SynthesisAgent:
                 f"- {c}" for c in inp.retrieved_cases[:3]
             )
 
-        score_block = ""
         if inp.score_table:
             score_block = f"\n\n=== QUANTITATIVE SCORE ===\n{inp.score_table}\n"
         elif inp.score_summary:
             score_block = f"\n\n=== QUANTITATIVE SCORE ===\n{inp.score_summary}\n"
+        else:
+            score_block = ""
 
         user = (
             f"User query: {inp.query}\n"

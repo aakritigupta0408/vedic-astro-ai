@@ -1,13 +1,4 @@
-"""
-settings.py — Central configuration for the Vedic Astrology AI System.
-
-All environment variables are declared here with types and defaults.
-Secrets (API keys, DB URIs) must be set in .env — never hardcoded.
-
-Usage:
-    from vedic_astro.settings import settings
-    model_name = settings.synthesis_model
-"""
+"""Central configuration. All secrets belong in .env, never in code."""
 
 from __future__ import annotations
 

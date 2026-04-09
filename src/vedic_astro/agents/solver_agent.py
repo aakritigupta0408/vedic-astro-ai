@@ -1,31 +1,3 @@
-"""
-solver_agent.py — Yoga/Dosha specialist agent + WeightedReasoning wrapper.
-
-This module provides two additions to the agent layer:
-
-1. ``YogaAgent`` — specialist agent for yoga and dosha interpretation.
-   Scope: active yogas (Pancha Mahapurusha, Raj, Dhana, Gajakesari…),
-          active doshas (Mangal, Kala Sarpa, Guru Chandala…), net strength.
-
-2. ``SolverResult`` — wrapper carrying structured weighted reasoning
-   alongside the final synthesis narrative.
-
-The ``SolverAgent`` class (for external callers) is a convenience wrapper
-that runs the full pipeline via ``PipelineRunner`` and returns a
-``SolverResult``.  Use this instead of ``PipelineRunner`` when you need
-the result from a single-call interface.
-
-Usage
------
-    solver = SolverAgent()
-    result = await solver.solve(
-        birth=BirthData(year=1990, month=6, day=15, hour=14, minute=30, place="Mumbai"),
-        query="What does my chart say about career?",
-        domain="career",
-    )
-    print(result.reading.to_markdown())
-"""
-
 from __future__ import annotations
 
 import logging
@@ -45,12 +17,7 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────────────────────
 
 class YogaAgent(BaseAgent):
-    """
-    Interprets active yogas and doshas from the natal chart.
-
-    Scope: confirms which yogas are present and operative given the dasha
-    and transit activation.  Quantifies their likely manifestation.
-    """
+    """Interprets active yogas and doshas from the natal chart."""
 
     name = "yoga"
     system_prompt = (
@@ -64,14 +31,13 @@ class YogaAgent(BaseAgent):
 
     @property
     def model(self) -> str:
-        return settings.natal_agent_model  # same tier as natal agent
+        return settings.natal_agent_model
 
     @property
     def max_tokens(self) -> int:
         return 400
 
     def build_user_prompt(self, inp: AgentInput) -> str:
-        data = inp.engine_data
         rules_block = ""
         if inp.retrieved_rules:
             rules_block = "\n\nClassical yoga/dosha rules:\n" + "\n".join(
@@ -79,40 +45,25 @@ class YogaAgent(BaseAgent):
             )
         return (
             f"Query: {inp.query}\n\n"
-            f"Yoga & Dosha Data:\n{data}\n"
+            f"Yoga & Dosha Data:\n{inp.engine_data}\n"
             f"{rules_block}\n\n"
             "Write a focused yoga/dosha interpretation."
         )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Solver result wrapper
+# Solver result + single-call entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
 @dataclass
 class SolverResult:
-    """Full result from SolverAgent."""
     reading: StructuredReading
-    pipeline_stages: list[str]      # stages completed in this run
+    pipeline_stages: list[str]
     from_cache: bool = False
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Solver agent (single-call interface wrapping PipelineRunner)
-# ─────────────────────────────────────────────────────────────────────────────
-
 class SolverAgent:
-    """
-    High-level solver that runs the full deterministic + LLM pipeline.
-
-    This is the single entry point for the Gradio UI and FastAPI endpoint.
-    It wraps ``PipelineRunner`` and returns a ``SolverResult``.
-
-    The pipeline follows the strict order:
-        natal → dasha → transit → D1–D60 → yogas/doshas
-        → weighted score → RAG → specialist LLMs → synthesis
-        → conditional critic → conditional reviser → structured output
-    """
+    """Single-call entry point that wraps PipelineRunner for the UI and API."""
 
     def __init__(self) -> None:
         from vedic_astro.agents.pipeline import PipelineRunner
@@ -125,15 +76,11 @@ class SolverAgent:
         domain: str = "general",
         depth: int = 2,
     ):
-        """
-        Phase 1 — compute all chart data without LLM calls.
-        Returns PipelineState populated with chart, dasha, transit,
-        D1–D60 vargas, yogas, shadbala, features and score.
-        """
+        """Phase 1 — run all deterministic engine stages, no LLM calls."""
         from vedic_astro.agents.pipeline import ReadingRequest
         request = ReadingRequest(
             birth=birth,
-            query="",          # no question yet
+            query="",
             domain=domain,
             query_date=query_date,
             depth=depth,
@@ -147,43 +94,24 @@ class SolverAgent:
         domain: str = "general",
         calibration_weights: Optional[dict] = None,
     ) -> SolverResult:
-        """
-        Phase 3 — run LLM prediction on a pre-computed chart state.
-        Accepts optional calibration_weights from Phase 2.
-        """
+        """Phase 3 — run LLM prediction on a pre-computed chart state."""
         reading = await self._runner.predict(
             chart_state, query, domain, calibration_weights
         )
         return SolverResult(
             reading=reading,
-            pipeline_stages=reading.score.notes if reading.score else [],
-            from_cache=False,
+            pipeline_stages=chart_state.stages_completed,
         )
 
     async def solve(
         self,
-        birth,           # BirthData
+        birth,
         query: str,
         domain: str = "general",
         query_date: Optional[date] = None,
         depth: int = 2,
     ) -> SolverResult:
-        """
-        Run the full pipeline for a single birth + query combination.
-
-        Parameters
-        ----------
-        birth      : Birth data (BirthData from pipeline.py).
-        query      : User's natural-language question.
-        domain     : Query domain for scoring (career|marriage|wealth|health|general).
-        query_date : Date for transits (default today).
-        depth      : Dasha depth (2 = Maha + Antar).
-
-        Returns
-        -------
-        SolverResult
-            Contains the StructuredReading and pipeline metadata.
-        """
+        """Run the full pipeline in one call (compute chart + predict)."""
         from vedic_astro.agents.pipeline import ReadingRequest
 
         request = ReadingRequest(
@@ -193,11 +121,8 @@ class SolverAgent:
             query_date=query_date,
             depth=depth,
         )
-
         reading = await self._runner.run(request)
-
         return SolverResult(
             reading=reading,
-            pipeline_stages=reading.score.notes,  # stages log is in score notes
-            from_cache=False,
+            pipeline_stages=[],  # state not available after run(); use compute_chart+predict to retain it
         )
