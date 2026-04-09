@@ -8,7 +8,7 @@ from vedic_astro.settings import settings
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM = """\
+_SYSTEM_BASE = """\
 You are a senior Vedic astrology synthesist. You receive focused sub-reports
 from specialist agents and a QUANTITATIVE SCORE BREAKDOWN. Your job is to
 produce ONE integrated reading whose narrative directly matches the numbers.
@@ -30,6 +30,42 @@ CRITICAL RULES:
 7. End with concrete 3-month actionable guidance.
 8. Max {max_tokens} tokens.
 """
+
+# Domain-specific focus hints injected into the system prompt so the synthesis
+# emphasises the correct houses, planets, and Vargas for the query topic.
+_DOMAIN_FOCUS: dict[str, str] = {
+    "career":       "Primary indicators: 10th house (10L), Sun, Saturn, D10 (Dashamsha). Secondary: 6th, 11th houses.",
+    "profession":   "Primary indicators: 10th house (10L), Sun, Saturn, D10 (Dashamsha). Secondary: 6th, 11th houses.",
+    "job":          "Primary indicators: 10th house (10L), Sun, Saturn, D10 (Dashamsha). Secondary: 6th, 11th houses.",
+    "business":     "Primary indicators: 7th house (partnerships), 10th house, Mercury, Jupiter. D10 Dashamsha.",
+    "marriage":     "Primary indicators: 7th house (7L), Venus, Moon, D9 (Navamsha). Secondary: 2nd house (family).",
+    "partner":      "Primary indicators: 7th house (7L), Venus, Moon, D9 (Navamsha). Secondary: 2nd house (family).",
+    "spouse":       "Primary indicators: 7th house (7L), Venus, Moon, D9 (Navamsha). Secondary: 2nd house (family).",
+    "relationship": "Primary indicators: 7th house (7L), Venus, Moon, D9 (Navamsha). Secondary: 2nd house (family).",
+    "children":     "Primary indicators: 5th house (5L), Jupiter, Moon, D7 (Saptamsha). Secondary: 9th house.",
+    "child":        "Primary indicators: 5th house (5L), Jupiter, Moon, D7 (Saptamsha). Secondary: 9th house.",
+    "wealth":       "Primary indicators: 2nd house (2L), 11th house (11L), Jupiter, Venus, D2 (Hora). Dhana yogas.",
+    "money":        "Primary indicators: 2nd house (2L), 11th house (11L), Jupiter, Venus, D2 (Hora). Dhana yogas.",
+    "finance":      "Primary indicators: 2nd house (2L), 11th house (11L), Jupiter, Venus, D2 (Hora). Dhana yogas.",
+    "health":       "Primary indicators: 1st house (1L), 6th house, Sun, Mars, D3 (Drekkana). Nakshatras.",
+    "disease":      "Primary indicators: 6th house (6L), 8th house, Saturn, Rahu, D3 (Drekkana).",
+    "longevity":    "Primary indicators: 8th house (8L), 1st house, Saturn, D3 (Drekkana). Maraka planets (2L, 7L).",
+    "spirituality": "Primary indicators: 9th house (9L), 12th house, Jupiter, Ketu, D9 + D20 (Vimshamsha).",
+    "spiritual":    "Primary indicators: 9th house (9L), 12th house, Jupiter, Ketu, D9 + D20 (Vimshamsha).",
+    "property":     "Primary indicators: 4th house (4L), Mars, Moon, D4 (Chaturthamsha).",
+    "home":         "Primary indicators: 4th house (4L), Mars, Moon, D4 (Chaturthamsha).",
+    "education":    "Primary indicators: 4th house (4L), 5th house (5L), Mercury, Jupiter, D24 (Siddhamsha).",
+    "travel":       "Primary indicators: 3rd house (short), 9th house (long), Moon, Rahu, 12th house.",
+}
+
+
+def _get_domain_focus(query: str) -> str:
+    """Pick the most relevant domain hint for the query, or empty string."""
+    q = query.lower()
+    for keyword, hint in _DOMAIN_FOCUS.items():
+        if keyword in q:
+            return hint
+    return ""
 
 
 @dataclass
@@ -57,7 +93,9 @@ class SynthesisAgent:
         self._llm = get_llm_client()
 
     async def run(self, inp: SynthesisInput) -> SynthesisOutput:
-        system = _SYSTEM.format(max_tokens=settings.synthesis_agent_max_tokens)
+        domain_hint = _get_domain_focus(inp.query)
+        domain_line = f"\nDomain focus for this query: {domain_hint}" if domain_hint else ""
+        system = (_SYSTEM_BASE + domain_line).format(max_tokens=settings.synthesis_agent_max_tokens)
 
         cases_block = ""
         if inp.retrieved_cases:

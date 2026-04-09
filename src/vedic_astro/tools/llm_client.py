@@ -63,6 +63,8 @@ class LLMClient:
                 system=system,
                 messages=[{"role": "user", "content": user}],
             )
+            if not response.content or not response.content[0].text:
+                raise RuntimeError("Anthropic returned an empty response")
             return response.content[0].text
         except Exception as exc:
             logger.error("Anthropic API error: %s", exc)

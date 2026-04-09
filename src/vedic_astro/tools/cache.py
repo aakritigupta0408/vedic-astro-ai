@@ -38,15 +38,18 @@ class CacheClient:
     All methods are coroutines.  Use ``get_cache()`` to obtain a singleton.
     """
 
+    _RETRY_INTERVAL = 300.0  # seconds between reconnect attempts after failure
+
     def __init__(self, redis_url: str) -> None:
         self._url = redis_url
         self._client: Any = None
-        self._unavailable: bool = False   # set on first failure; suppresses repeat warnings
+        self._unavailable_until: float = 0.0  # epoch; retry allowed when time() > this
 
     async def _ensure_connected(self) -> bool:
         if self._client is not None:
             return True
-        if self._unavailable:
+        import time
+        if time.monotonic() < self._unavailable_until:
             return False
         try:
             import redis.asyncio as aioredis  # type: ignore[import]
@@ -61,9 +64,10 @@ class CacheClient:
             logger.debug("Redis connected: %s", self._url)
             return True
         except Exception as exc:
-            logger.warning("Redis unavailable (%s) — caching disabled", exc)
+            import time as _time
+            logger.warning("Redis unavailable (%s) — will retry in %ds", exc, self._RETRY_INTERVAL)
             self._client = None
-            self._unavailable = True
+            self._unavailable_until = _time.monotonic() + self._RETRY_INTERVAL
             return False
 
     async def get(self, key: str) -> Optional[Any]:
@@ -78,7 +82,12 @@ class CacheClient:
             raw = await self._client.get(key)
             if raw is None:
                 return None
-            return json.loads(raw)
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError as exc:
+                logger.warning("Cache GET: corrupt JSON for key %r (%s) — evicting", key, exc)
+                await self._client.delete(key)
+                return None
         except Exception as exc:
             logger.debug("Cache GET error for key %r: %s", key, exc)
             return None

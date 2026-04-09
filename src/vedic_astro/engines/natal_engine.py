@@ -416,16 +416,115 @@ def cache_natal(fn: Callable) -> Callable:
 
 
 def _serialize_chart(chart: NatalChart) -> dict:
-    """Minimal serialization for Redis storage. Full schema uses Pydantic in storage layer."""
-    import dataclasses
-    return dataclasses.asdict(chart)  # shallow — sufficient for cache round-trip
+    """Convert a NatalChart to a JSON-safe dict for Redis storage."""
+    def _planet_pos(pos: PlanetPosition) -> dict:
+        nak = pos.nakshatra
+        return {
+            "planet": pos.planet.value,
+            "longitude": pos.longitude,
+            "sign_number": pos.sign_number,
+            "sign_name": pos.sign_name,
+            "degree_in_sign": pos.degree_in_sign,
+            "house": pos.house,
+            "is_retrograde": pos.is_retrograde,
+            "speed": pos.speed,
+            "dignity": pos.dignity.value,
+            "nakshatra": {
+                "index": nak.index,
+                "name": nak.name,
+                "lord": nak.lord.value,
+                "pada": nak.pada,
+                "elapsed_degrees": nak.elapsed_degrees,
+                "elapsed_percent": nak.elapsed_percent,
+            },
+        }
+
+    def _bhava(bh: BhavaData) -> dict:
+        return {
+            "house_number": bh.house_number,
+            "sign_number": bh.sign_number,
+            "sign_name": bh.sign_name,
+            "lord": bh.lord.value,
+            "occupants": [p.value for p in bh.occupants],
+        }
+
+    return {
+        "chart_id": chart.chart_id,
+        "dob": chart.dob.isoformat(),
+        "tob_utc": chart.tob_utc.isoformat(),
+        "lat": chart.lat,
+        "lon": chart.lon,
+        "ayanamsha": chart.ayanamsha.value,
+        "ayanamsha_value": chart.ayanamsha_value,
+        "jd": chart.jd,
+        "lagna_longitude": chart.lagna_longitude,
+        "lagna_sign": chart.lagna_sign,
+        "lagna_sign_name": chart.lagna_sign_name,
+        "planets": {p.value: _planet_pos(pos) for p, pos in chart.planets.items()},
+        "bhavas": {str(h): _bhava(bh) for h, bh in chart.bhavas.items()},
+        "computed_at": chart.computed_at.isoformat() if chart.computed_at else None,
+    }
 
 
 def _deserialize_chart(data: dict) -> NatalChart:
-    """Reconstruct NatalChart from cached dict. Called only on cache hit."""
-    # In production this delegates to the Pydantic schema validator.
-    # Placeholder for the storage layer to implement.
-    raise NotImplementedError("Deserialization must be implemented in storage layer")
+    """Reconstruct a NatalChart from the dict produced by _serialize_chart."""
+    from datetime import date as _date
+
+    def _nak(d: dict) -> NakshatraData:
+        return NakshatraData(
+            index=d["index"],
+            name=d["name"],
+            lord=PlanetName(d["lord"]),
+            pada=d["pada"],
+            elapsed_degrees=d["elapsed_degrees"],
+            elapsed_percent=d["elapsed_percent"],
+        )
+
+    def _pos(d: dict) -> PlanetPosition:
+        return PlanetPosition(
+            planet=PlanetName(d["planet"]),
+            longitude=d["longitude"],
+            sign_number=d["sign_number"],
+            sign_name=d["sign_name"],
+            degree_in_sign=d["degree_in_sign"],
+            house=d["house"],
+            is_retrograde=d["is_retrograde"],
+            speed=d["speed"],
+            dignity=Dignity(d["dignity"]),
+            nakshatra=_nak(d["nakshatra"]),
+        )
+
+    def _bh(d: dict) -> BhavaData:
+        return BhavaData(
+            house_number=d["house_number"],
+            sign_number=d["sign_number"],
+            sign_name=d["sign_name"],
+            lord=PlanetName(d["lord"]),
+            occupants=[PlanetName(p) for p in d["occupants"]],
+        )
+
+    planets = {PlanetName(k): _pos(v) for k, v in data["planets"].items()}
+    bhavas  = {int(k): _bh(v) for k, v in data["bhavas"].items()}
+    tob_utc = datetime.fromisoformat(data["tob_utc"])
+    if tob_utc.tzinfo is None:
+        tob_utc = tob_utc.replace(tzinfo=timezone.utc)
+
+    return NatalChart(
+        chart_id=data["chart_id"],
+        dob=_date.fromisoformat(data["dob"]),
+        tob_utc=tob_utc,
+        lat=data["lat"],
+        lon=data["lon"],
+        ayanamsha=AyanamshaType(data["ayanamsha"]),
+        ayanamsha_value=data["ayanamsha_value"],
+        jd=data["jd"],
+        lagna_longitude=data["lagna_longitude"],
+        lagna_sign=data["lagna_sign"],
+        lagna_sign_name=data["lagna_sign_name"],
+        planets=planets,
+        bhavas=bhavas,
+        computed_at=datetime.fromisoformat(data["computed_at"]) if data.get("computed_at") else None,
+    )
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Core computation functions
@@ -729,6 +828,69 @@ def compute_chara_karakas(
         karaka: planet
         for karaka, planet in zip(karaka_names, sorted_planets[:7])
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Planetary aspects (Parashari)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Special aspects in addition to the universal 7th-house (opposition) aspect.
+# Format: planet → set of additional house offsets (1-based, relative to the planet's house).
+_SPECIAL_ASPECTS: dict[PlanetName, set[int]] = {
+    PlanetName.MARS:    {4, 8},   # Mars aspects 4th and 8th in addition to 7th
+    PlanetName.JUPITER: {5, 9},   # Jupiter aspects 5th and 9th
+    PlanetName.SATURN:  {3, 10},  # Saturn aspects 3rd and 10th
+    PlanetName.RAHU:    {5, 9},   # Rahu: same as Jupiter per Parashari tradition
+    PlanetName.KETU:    {5, 9},   # Ketu: same as Jupiter per Parashari tradition
+}
+
+
+def compute_planetary_aspects(
+    bhavas: dict[int, BhavaData],
+    planet_houses: dict[PlanetName, int],
+) -> dict[PlanetName, list[int]]:
+    """
+    Compute the houses each planet aspects using Parashari aspect rules.
+
+    All planets aspect the 7th house from their position (opposition).
+    Mars, Jupiter, Saturn, Rahu, and Ketu have additional special aspects.
+
+    Args:
+        bhavas:        House data (used to find occupants and lords).
+        planet_houses: Mapping of planet → house number (1–12).
+
+    Returns:
+        Dict of planet → list of house numbers it aspects.
+    """
+    aspects: dict[PlanetName, list[int]] = {}
+    for planet, house in planet_houses.items():
+        aspected = set()
+        # Universal 7th aspect (opposition)
+        aspected.add(((house - 1 + 6) % 12) + 1)
+        # Special aspects
+        for offset in _SPECIAL_ASPECTS.get(planet, set()):
+            aspected.add(((house - 1 + offset - 1) % 12) + 1)
+        aspects[planet] = sorted(aspected)
+    return aspects
+
+
+def get_mutual_relationship(p1: PlanetName, p2: PlanetName) -> str:
+    """
+    Return the natural relationship between two planets.
+
+    Uses the Parashari pancha-maitri (five-fold friendship) principle.
+    Rahu and Ketu friendships follow the traditional BPHS assignments.
+
+    Returns:
+        "friend" | "enemy" | "neutral"
+    """
+    friends = _NATURAL_FRIENDS.get(p1, set())
+    enemies = _NATURAL_ENEMIES.get(p1, set())
+    if p2 in friends:
+        return "friend"
+    if p2 in enemies:
+        return "enemy"
+    return "neutral"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

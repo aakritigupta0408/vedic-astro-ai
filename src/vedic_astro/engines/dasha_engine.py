@@ -34,6 +34,7 @@ from vedic_astro.engines.natal_engine import (
     PlanetName,
     NAKSHATRA_LORDS,   # canonical source — defined in natal_engine to avoid circular import
     NAKSHATRA_SPAN,
+    get_mutual_relationship,  # re-exported here so dasha callers have one import point
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -91,7 +92,12 @@ class DashaPeriod:
         self.duration_days = (self.end - self.start).days
 
     def contains(self, query_date: date) -> bool:
-        """True if query_date falls within [start, end)."""
+        """True if query_date falls within [start, end).
+
+        Half-open interval is intentional: a dasha transitions at the START of
+        the end date, so that date belongs to the next period. This matches the
+        standard Vimshottari convention used in Jyotish software.
+        """
         return self.start <= query_date < self.end
 
     def elapsed_fraction(self, query_date: date) -> float:

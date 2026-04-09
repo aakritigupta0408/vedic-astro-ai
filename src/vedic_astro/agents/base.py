@@ -74,7 +74,26 @@ class BaseAgent(ABC):
             key_factors=key_factors,
         )
 
-    @staticmethod
-    def _extract_key_factors(narrative: str) -> list[str]:
+    # Domain keywords used to score sentences for relevance.
+    # Sentences containing these terms are preferred over generic ones.
+    _DOMAIN_KEYWORDS: frozenset[str] = frozenset({
+        "sun", "moon", "mars", "mercury", "jupiter", "venus", "saturn", "rahu", "ketu",
+        "lagna", "ascendant", "house", "lord", "sign", "aries", "taurus", "gemini",
+        "cancer", "leo", "virgo", "libra", "scorpio", "sagittarius", "capricorn",
+        "aquarius", "pisces", "dasha", "antardasha", "navamsha", "d9", "d10",
+        "exalted", "debilitated", "retrograde", "yoga", "dosha", "transit", "gochara",
+        "nakshatra", "dignity", "benefic", "malefic", "kendra", "trikona",
+    })
+
+    @classmethod
+    def _extract_key_factors(cls, narrative: str) -> list[str]:
         sentences = re.split(r"(?<=[.!?])\s+", narrative.strip())
-        return [s.strip() for s in sentences if len(s.strip()) > 20][:5]
+        # Score each sentence by how many domain keywords it contains.
+        # Ties broken by sentence order (earlier sentences rank higher).
+        def score(s: str) -> int:
+            lower = s.lower()
+            return sum(1 for kw in cls._DOMAIN_KEYWORDS if kw in lower)
+
+        candidates = [s.strip() for s in sentences if len(s.strip()) > 15]
+        candidates.sort(key=score, reverse=True)
+        return candidates[:5]
