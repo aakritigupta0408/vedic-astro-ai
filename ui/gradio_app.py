@@ -1196,11 +1196,11 @@ def handle_generate_calibration(chart_state):
 
 
 def handle_score_calibration(chart_state, questions, *answers):
-    """Score calibration answers and return adjusted weights."""
+    """Run convergence calibration: adjust weights until model matches user answers."""
     if not questions:
         return (None, "⚠ Generate questions first.")
 
-    from vedic_astro.agents.calibration import score_answers
+    from vedic_astro.agents.calibration import calibrate_convergence
     answer_list = []
     for q, ans in zip(questions, answers):
         answer_list.append({
@@ -1209,7 +1209,7 @@ def handle_score_calibration(chart_state, questions, *answers):
             "skipped": not (ans and str(ans).strip()),
         })
 
-    result = score_answers(questions, answer_list, state=chart_state)
+    result = calibrate_convergence(questions, answer_list, state=chart_state)
     return (result, result.summary_markdown())
 
 

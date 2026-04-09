@@ -432,7 +432,6 @@ class CalibrationResult:
     notes:            list[str] = field(default_factory=list)
 
     def summary_markdown(self) -> str:
-        # Accuracy indicator
         pct = self.overall_accuracy
         if pct >= 0.70:
             acc_label = "Strong"
@@ -442,15 +441,15 @@ class CalibrationResult:
             acc_label = "Weak"
 
         lines = [
-            f"**Calibration complete** · {self.answered_count} question(s) scored\n",
-            f"**Chart accuracy: {pct:.0%}** ({acc_label})\n",
-            "**Calibrated weights:**",
+            f"**Calibration complete** · {self.answered_count} question(s) answered · {self.skipped_count} skipped\n",
+            f"**Model–user agreement: {pct:.0%}** ({acc_label})\n",
+            "**Converged weights** *(adjusted until model matched your answers)*:",
         ]
         for factor, w in self.weights.items():
             bar = "█" * int(w * 20)
             lines.append(f"- {factor.title()}: `{w:.0%}` {bar}")
 
-        # Per-factor match scores
+        # Per-factor agreement rates
         factor_scores = {
             "Dasha":   self.dasha_match,
             "Natal":   self.natal_match,
@@ -458,16 +457,16 @@ class CalibrationResult:
             "Yoga":    self.yoga_match,
             "Bhava":   self.bhava_match,
         }
-        lines.append("\n**Factor match scores:**")
+        lines.append("\n**Factor agreement rates:**")
         for name, score in factor_scores.items():
             stars = "★" * round(score * 5) + "☆" * (5 - round(score * 5))
             lines.append(f"- {name}: {stars} ({score:.0%})")
 
-        # Significant notes only (skip the redundant accuracy repeat)
+        # Per-question model-vs-user comparison
         event_notes = [n for n in self.notes if not n.startswith("Chart accuracy")]
         if event_notes:
-            lines.append("\n**Event matches:**")
-            for n in event_notes[:6]:
+            lines.append("\n**Model vs. your answers:**")
+            for n in event_notes[:10]:
                 lines.append(f"- {n}")
         return "\n".join(lines)
 
@@ -759,3 +758,352 @@ def _weight_multiplier(match_score: float) -> float:
         return 1.0 + (match_score - 0.5) * 2.0  # 1.0 → 2.0
     else:
         return 0.5 + match_score  # 0.5 → 1.0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Convergence-based calibration (new primary path)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Dignity scores for natal planet strength in predictions
+_DIGNITY_SCORE: dict[str, float] = {
+    "exalted":      1.00,
+    "moolatrikona": 0.85,
+    "own_sign":     0.80,
+    "neutral":      0.50,
+    "debilitated":  0.20,
+}
+
+# Sentiment buckets for period/description questions
+_PERIOD_SENTIMENT: list[tuple[float, str]] = [
+    (0.75, "Thriving — exceptional growth and gains"),
+    (0.60, "Positive — steady progress with minor setbacks"),
+    (0.45, "Mixed — equal highs and lows"),
+    (0.30, "Challenging — significant difficulties"),
+    (0.00, "Very difficult — major losses or crises"),
+]
+
+_LIFE_PHASE_THRESHOLDS: list[tuple[float, str]] = [
+    (0.70, "Peak — at my most successful and active"),
+    (0.55, "Building — establishing career, relationships, foundation"),
+    (0.40, "Transition — going through major changes"),
+    (0.00, "Consolidation — slowing down, reflecting, wisdom phase"),
+]
+
+
+def _natal_dignity_of_lord(lord: str, state: Any) -> float:
+    """Return natal dignity score (0–1) for a planet from chart state."""
+    if state is None or state.chart is None:
+        return 0.5
+    try:
+        from vedic_astro.rules.bphs_rules import (
+            EXALTATION_SIGN, DEBILITATION_SIGN, MOOLATRIKONA, OWN_SIGNS
+        )
+        from vedic_astro.engines.natal_engine import PlanetName
+        lord_key = lord.lower()
+        for pname, pos in state.chart.planets.items():
+            if pname.value.lower() == lord_key:
+                sign = pos.sign if isinstance(pos.sign, str) else str(pos.sign)
+                planet_title = lord.title()
+                if sign == EXALTATION_SIGN.get(planet_title):
+                    return _DIGNITY_SCORE["exalted"]
+                if sign == DEBILITATION_SIGN.get(planet_title):
+                    return _DIGNITY_SCORE["debilitated"]
+                if sign == MOOLATRIKONA.get(planet_title):
+                    return _DIGNITY_SCORE["moolatrikona"]
+                if sign in OWN_SIGNS.get(planet_title, []):
+                    return _DIGNITY_SCORE["own_sign"]
+                return _DIGNITY_SCORE["neutral"]
+    except Exception:
+        pass
+    return 0.5
+
+
+def _karaka_strength_score(lord: str, question_id: str) -> float:
+    """Numeric karaka strength: strong=1.0, partial=0.5, weak=0.1."""
+    match = _lord_matches_question(lord.lower(), question_id)
+    return {"strong": 1.0, "partial": 0.5, "weak": 0.1}[match]
+
+
+def predict_answer(q: CalibrationQuestion, state: Any, weights: dict[str, float]) -> str:
+    """
+    Deterministic chart-based prediction of the MCQ answer for question q.
+
+    For year questions: scores each dasha period in the user's adult life as
+        score = karaka_strength × weights["dasha"]
+              + natal_dignity × weights["natal"]
+    and returns the label of the highest-scoring period.
+
+    For yes_no / period / description: uses score.final_score mapped to buckets.
+    Falls back to "Not applicable / Skip" when chart data is missing.
+    """
+    skip = "Not applicable / Skip"
+
+    if q.answer_type == "year":
+        return _predict_year_period(q, state, weights)
+
+    if q.answer_type == "yes_no":
+        return _predict_yes_no(q, state, weights)
+
+    if q.answer_type == "period":
+        return _predict_period(state, weights)
+
+    if q.answer_type == "description":
+        return _predict_life_phase(state, weights)
+
+    return skip
+
+
+def _predict_year_period(q: CalibrationQuestion, state: Any, weights: dict) -> str:
+    """Score each adult dasha period and return the label of the highest-scoring one."""
+    skip = "Not applicable / Skip"
+    try:
+        from datetime import date as _date
+        from vedic_astro.engines.dasha_engine import compute_maha_dashas
+        from vedic_astro.engines.natal_engine import PlanetName
+
+        moon_lon = state.chart.planets[PlanetName.MOON].longitude
+        b = state.request.birth
+        birth_dt = _date(b.year, b.month, b.day)
+        adult_year    = b.year + 15
+        current_year  = _date.today().year + 5
+
+        all_mahas = compute_maha_dashas(moon_lon, birth_dt)
+        best_label = skip
+        best_score = -1.0
+
+        dasha_w = weights.get("dasha", 0.30)
+        natal_w = weights.get("natal", 0.20)
+
+        for m in all_mahas:
+            if m.end.year < adult_year or m.start.year > current_year:
+                continue
+            lord = m.lord.value
+            karaka = _karaka_strength_score(lord, q.id)
+            dignity = _natal_dignity_of_lord(lord, state)
+            score = karaka * dasha_w + dignity * natal_w
+            if score > best_score:
+                best_score = score
+                best_label = f"{lord.title()} period ({m.start.year}–{m.end.year})"
+
+        return best_label
+    except Exception:
+        return skip
+
+
+def _predict_yes_no(q: CalibrationQuestion, state: Any, weights: dict) -> str:
+    """Predict Yes/No based on yoga presence and yoga weight."""
+    try:
+        yoga_w = weights.get("yoga", 0.20)
+        if state.yoga_bundle:
+            yoga_names = [y.name.lower() for y in state.yoga_bundle.active_yogas]
+            # raj_yoga question: check for raja/raj yoga presence
+            if q.id == "raj_yoga" and any("raj" in n or "raja" in n for n in yoga_names):
+                # If yoga is present AND we trust yoga factor sufficiently → Yes
+                return "Yes" if yoga_w >= 0.12 else "No"
+        return "No"
+    except Exception:
+        return "Not applicable / Skip"
+
+
+def _predict_period(state: Any, weights: dict) -> str:
+    """Map the chart's final score to a sentiment bucket."""
+    try:
+        if state.score is None:
+            return "Mixed — equal highs and lows"
+        score = state.score.final_score
+        for threshold, label in _PERIOD_SENTIMENT:
+            if score >= threshold:
+                return label
+    except Exception:
+        pass
+    return "Mixed — equal highs and lows"
+
+
+def _predict_life_phase(state: Any, weights: dict) -> str:
+    """Map chart score to life phase."""
+    try:
+        if state.score is None:
+            return "Transition — going through major changes"
+        score = state.score.final_score
+        for threshold, label in _LIFE_PHASE_THRESHOLDS:
+            if score >= threshold:
+                return label
+    except Exception:
+        pass
+    return "Transition — going through major changes"
+
+
+def _normalize_weights(w: dict[str, float]) -> dict[str, float]:
+    total = sum(w.values())
+    if total <= 0:
+        return w
+    return {k: round(v / total, 4) for k, v in w.items()}
+
+
+def _adjust_weights(
+    weights: dict[str, float],
+    factor: str,
+    user_ans_karaka_consistent: bool,
+    step: float = 0.04,
+) -> dict[str, float]:
+    """
+    Nudge weights toward or away from `factor` based on whether the user's
+    answer was karaka-consistent with that factor's prediction.
+
+    Consistent (factor predicted something close to truth): increase factor weight.
+    Inconsistent (factor's model of the world doesn't match reality):  decrease it.
+    """
+    w = dict(weights)
+    if user_ans_karaka_consistent:
+        # Increase this factor — its rules ARE correct for this person
+        w[factor] = min(0.55, w[factor] + step)
+    else:
+        # Decrease this factor — its rules DON'T fit this person
+        w[factor] = max(0.04, w[factor] - step)
+    return _normalize_weights(w)
+
+
+@dataclass
+class QuestionResult:
+    """Per-question outcome from the convergence loop."""
+    question_id:   str
+    question_text: str
+    user_answer:   str
+    model_answer:  str
+    matched:       bool
+    iterations_to_match: int   # 0 = matched on first try, -1 = never converged
+
+
+def calibrate_convergence(
+    questions: list[CalibrationQuestion],
+    user_answers: list[dict],
+    state: Any,
+    max_iter: int = 10,
+) -> CalibrationResult:
+    """
+    Primary calibration path.
+
+    For each answered question:
+    1. The model predicts an answer from the chart + current weights.
+    2. Compare with the user's answer.
+    3. If they match → weights are validated for this factor.
+    4. If they differ → adjust the factor weight and re-predict.
+    5. Repeat until all answered questions match or max_iter is reached.
+
+    Returns a CalibrationResult with converged weights and a per-question log
+    stored in .notes.
+    """
+    _DEFAULT_WEIGHTS = {
+        "natal": 0.20, "dasha": 0.30, "transit": 0.20,
+        "yoga": 0.20, "bhava": 0.10,
+    }
+    weights = dict(_DEFAULT_WEIGHTS)
+
+    answer_map = {a["id"]: a for a in user_answers}
+
+    # Filter to actually answered (non-skip) questions
+    answered: list[tuple[CalibrationQuestion, str]] = []
+    skipped_count = 0
+    for q in questions:
+        ans = answer_map.get(q.id)
+        if not ans:
+            skipped_count += 1
+            continue
+        raw = ans.get("answer") or ""
+        if (
+            ans.get("skipped")
+            or not raw
+            or str(raw).strip().lower().startswith("not applicable")
+        ):
+            skipped_count += 1
+            continue
+        answered.append((q, str(raw).strip()))
+
+    if not answered:
+        result = CalibrationResult(answered_count=0, skipped_count=skipped_count)
+        result.notes = ["No answers provided — using default weights."]
+        return result
+
+    question_results: list[QuestionResult] = []
+
+    # Per-question convergence loop (each question gets its own weight adjustment)
+    for q, user_ans in answered:
+        iters_to_match = -1
+        for iteration in range(max_iter + 1):
+            model_pred = predict_answer(q, state, weights)
+            if model_pred == user_ans:
+                iters_to_match = iteration
+                break
+            if iteration < max_iter:
+                # Determine if user's answer is karaka-consistent with this factor
+                # For year questions: check karaka match of user's chosen lord
+                karaka_consistent = False
+                if q.answer_type == "year":
+                    import re as _re
+                    m = _re.match(r"^([A-Za-z]+)\s+period", user_ans)
+                    if m:
+                        user_lord = m.group(1).lower()
+                        karaka_consistent = (
+                            _lord_matches_question(user_lord, q.id) in ("strong", "partial")
+                        )
+                elif q.answer_type == "yes_no":
+                    karaka_consistent = (user_ans.lower() == "yes")
+                elif q.answer_type in ("period", "description"):
+                    # positive answer → chart score should be high → trust current factors
+                    karaka_consistent = any(
+                        w in user_ans.lower()
+                        for w in ("thriving", "positive", "peak", "building")
+                    )
+
+                weights = _adjust_weights(weights, q.domain_factor, karaka_consistent)
+
+        question_results.append(QuestionResult(
+            question_id=q.id,
+            question_text=q.text,
+            user_answer=user_ans,
+            model_answer=predict_answer(q, state, weights),
+            matched=(iters_to_match >= 0),
+            iterations_to_match=iters_to_match,
+        ))
+
+    # Compute final match statistics
+    matched = [r for r in question_results if r.matched]
+    overall_accuracy = len(matched) / len(question_results) if question_results else 0.5
+
+    # Build per-factor match rates
+    factor_results: dict[str, list[bool]] = {f: [] for f in weights}
+    for r, (q, _) in zip(question_results, answered):
+        factor_results[q.domain_factor].append(r.matched)
+
+    def _factor_acc(lst: list[bool]) -> float:
+        return sum(lst) / len(lst) if lst else 0.5
+
+    dasha_m   = _factor_acc(factor_results["dasha"])
+    natal_m   = _factor_acc(factor_results["natal"])
+    transit_m = _factor_acc(factor_results["transit"])
+    yoga_m    = _factor_acc(factor_results["yoga"])
+    bhava_m   = _factor_acc(factor_results["bhava"])
+
+    # Build human-readable notes
+    notes: list[str] = []
+    for r in question_results:
+        icon = "✓" if r.matched else "✗"
+        iters = f" (converged in {r.iterations_to_match} steps)" if r.matched and r.iterations_to_match > 0 else ""
+        no_conv = " (did not converge)" if not r.matched else ""
+        notes.append(
+            f"{icon} [{r.question_id}] Model: *{r.model_answer}* | You: *{r.user_answer}*"
+            f"{iters}{no_conv}"
+        )
+
+    return CalibrationResult(
+        dasha_match=round(dasha_m, 3),
+        natal_match=round(natal_m, 3),
+        transit_match=round(transit_m, 3),
+        yoga_match=round(yoga_m, 3),
+        bhava_match=round(bhava_m, 3),
+        weights=weights,
+        overall_accuracy=round(overall_accuracy, 3),
+        answered_count=len(answered),
+        skipped_count=skipped_count,
+        notes=notes,
+    )
